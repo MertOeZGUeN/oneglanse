@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "izi.ai-visibility.prompt-set.v1",
+  "id": "gloria-live-acceptance",
+  "version": "1.0.0",
+  "name": "Gloria live consumer-UI acceptance",
+  "defaultRepeat": 1,
+  "prompts": [
+    {
+      "id": "ACC-GENERAL-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "consumer_ui_general_acceptance",
+      "prompt": "What are the best luxury resorts in Belek for a high-end Mediterranean holiday?",
+      "enabled": true
+    },
+    {
+      "id": "ACC-SOURCES-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "comparative",
+      "intent": "consumer_ui_source_acceptance",
+      "prompt": "Compare several luxury resorts in Belek for golf, family facilities, dining and premium accommodation. Use web sources where available.",
+      "enabled": true
+    }
+  ]
+}
