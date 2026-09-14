@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS analytics.prompt_responses (
         favicon Nullable(String)
     )),
     capture_status LowCardinality(String) DEFAULT 'answered',
+    screenshot_path String DEFAULT '',
+    captured_at String DEFAULT '',
+    visibility_metadata String DEFAULT '{}',
     is_analysed Bool DEFAULT false,
     prompt_run_at DateTime,
     created_at DateTime DEFAULT now()
@@ -57,3 +60,6 @@ ORDER BY (
 -- Migrations are safe to run repeatedly on existing local installs.
 ALTER TABLE analytics.prompt_analysis ADD COLUMN IF NOT EXISTS prompt String DEFAULT '';
 ALTER TABLE analytics.prompt_responses ADD COLUMN IF NOT EXISTS capture_status LowCardinality(String) DEFAULT 'answered';
+ALTER TABLE analytics.prompt_responses ADD COLUMN IF NOT EXISTS screenshot_path String DEFAULT '';
+ALTER TABLE analytics.prompt_responses ADD COLUMN IF NOT EXISTS captured_at String DEFAULT '';
+ALTER TABLE analytics.prompt_responses ADD COLUMN IF NOT EXISTS visibility_metadata String DEFAULT '{}';
