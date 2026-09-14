@@ -1,6 +1,4 @@
 import type { Source } from "./sources.js";
-import type { VisibilityRunStatus } from "./visibility.js";
-import type { FailureType } from "./browser.js";
 
 export interface AskPromptResult {
 	userId: string;
@@ -9,9 +7,6 @@ export interface AskPromptResult {
 	prompt: string;
 	response: string;
 	sources: Source[];
-	captureStatus: VisibilityRunStatus;
-	failureType?: FailureType | null;
-	errorMessage?: string | null;
 }
 
 export const PROVIDER_LIST = [
