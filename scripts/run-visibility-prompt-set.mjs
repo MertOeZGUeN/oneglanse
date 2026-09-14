@@ -99,6 +99,7 @@ async function waitForRun({ services, workspaceId, runGroupId, jobGroupId, timeo
 async function main() {
   const workspaceId = readArg("--workspace") || process.env.IZI_VISIBILITY_WORKSPACE_ID;
   const userId = readArg("--user") || process.env.IZI_VISIBILITY_USER_ID;
+  const runLabel = readArg("--run-label") || process.env.IZI_VISIBILITY_RUN_LABEL;
   const promptSetPath =
     readArg("--prompt-set") || "config/visibility/gloria-v1.example.json";
   const providers = parseProviders(readArg("--providers"));
@@ -126,9 +127,10 @@ async function main() {
     userId,
     promptSet,
     providers,
+    runLabel,
   });
 
-  console.log(JSON.stringify(submitted, null, 2));
+  console.log(JSON.stringify({ ...submitted, runLabel: runLabel || null }, null, 2));
   if (!wait || submitted.status !== "queued") return;
 
   const records = await waitForRun({
@@ -143,6 +145,7 @@ async function main() {
   const report = {
     schemaVersion: "izi.ai-visibility.live-acceptance.v1",
     runGroupId: submitted.runGroupId,
+    runLabel: runLabel || null,
     promptSetId: promptSet.id,
     promptSetVersion: promptSet.version,
     providers: providerReport,
