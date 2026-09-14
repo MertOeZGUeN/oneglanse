@@ -21,6 +21,7 @@ export interface VisibilityPromptExecutionMeta {
 	runLabel?: string;
 	promptSetId: string;
 	promptSetVersion: string;
+	promptDefinitionId: string;
 	promptVersion: string;
 	language: string;
 	lens: VisibilityLens;
