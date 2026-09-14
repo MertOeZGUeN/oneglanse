@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "izi.ai-visibility.prompt-set.v1",
+  "id": "gloria-baseline-example",
+  "version": "1.0.0",
+  "name": "Gloria AI Visibility Baseline Example",
+  "defaultRepeat": 3,
+  "prompts": [
+    {
+      "id": "EN-GEN-LUX-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "luxury_resort_discovery",
+      "prompt": "Which luxury resorts in Belek are best for a high-end Mediterranean holiday?"
+    },
+    {
+      "id": "EN-GEN-GOLF-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "golf_holiday",
+      "prompt": "Which resorts in Belek are best for a premium golf holiday?"
+    },
+    {
+      "id": "EN-GEN-FAMILY-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "family_luxury",
+      "prompt": "Which luxury resorts in Belek are best for families with children?"
+    },
+    {
+      "id": "EN-GEN-VILLA-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "villa_premium_stay",
+      "prompt": "Which resorts in Belek offer the best premium villa or private-pool stays?"
+    }
+  ]
+}
