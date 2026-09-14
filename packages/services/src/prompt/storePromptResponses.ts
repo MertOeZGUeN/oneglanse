@@ -4,6 +4,7 @@ import type {
 	Provider,
 	Source,
 	StorePromptResponsesArgs,
+	VisibilityRunStatus,
 } from "@oneglanse/types";
 import { formatDateToClickHouse } from "@oneglanse/utils";
 import { v4 as uuidv4 } from "uuid";
@@ -24,6 +25,7 @@ export async function storePromptResponses(
 		model_provider: string;
 		response: string;
 		sources: Source[];
+		capture_status: VisibilityRunStatus;
 		prompt_run_at: string;
 	}> = [];
 
@@ -50,6 +52,7 @@ export async function storePromptResponses(
 					domain: s.domain ?? null,
 					favicon: s.favicon ?? null,
 				})),
+				capture_status: item.captureStatus ?? "answered",
 				prompt_run_at: formatDateToClickHouse(new Date(promptRunAt)),
 			});
 		}
@@ -69,6 +72,7 @@ export async function storePromptResponses(
 				prompt_id: value.prompt_id,
 				prompt: value.prompt.slice(0, 100),
 				prompt_run_at: value.prompt_run_at,
+				capture_status: value.capture_status,
 				response_length: value.response.length,
 				sources_count: value.sources.length,
 			});
