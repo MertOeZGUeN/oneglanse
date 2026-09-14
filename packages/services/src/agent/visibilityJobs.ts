@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { toErrorMessage } from "@oneglanse/errors";
+import { db, schema } from "@oneglanse/db";
+import { ValidationError, toErrorMessage } from "@oneglanse/errors";
 import type {
 	PromptPayload,
 	Provider,
 	VisibilityPromptSet,
 } from "@oneglanse/types";
 import { PROVIDER_LIST } from "@oneglanse/types";
+import { and, eq, isNull } from "drizzle-orm";
 import { buildVisibilityPromptExecutions } from "../analysis/promptSet.js";
 import { getWorkspaceById } from "../workspace/index.js";
 import {
@@ -24,6 +26,80 @@ export type SubmitVisibilityJobResult =
 	| { status: "queued"; jobGroupId: string; runGroupId: string; promptCount: number }
 	| { status: "empty" }
 	| { status: "no-providers"; disconnectedProviders: Provider[] };
+
+function normalizeWorkspaceDomain(value: string): string {
+	const trimmed = value.trim().toLowerCase();
+	if (!trimmed) return "";
+	try {
+		const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+		return url.hostname.replace(/^www\./, "");
+	} catch {
+		return trimmed.replace(/^www\./, "").replace(/\/$/, "");
+	}
+}
+
+/**
+ * Convenience resolver for the local acceptance runner. It only auto-selects when
+ * one active workspace and one active member match the requested domain; otherwise
+ * callers must pass explicit IDs rather than guessing.
+ */
+export async function resolveVisibilityRunIdentityByDomain(args: {
+	domain: string;
+}): Promise<{ workspaceId: string; userId: string }> {
+	const targetDomain = normalizeWorkspaceDomain(args.domain);
+	if (!targetDomain) throw new ValidationError("Visibility workspace domain is empty.");
+
+	const rows = await db
+		.select({
+			workspaceId: schema.workspaces.id,
+			domain: schema.workspaces.domain,
+			userId: schema.workspaceMembers.userId,
+		})
+		.from(schema.workspaces)
+		.innerJoin(
+			schema.workspaceMembers,
+			eq(schema.workspaceMembers.workspaceId, schema.workspaces.id),
+		)
+		.where(
+			and(
+				isNull(schema.workspaces.deletedAt),
+				isNull(schema.workspaceMembers.deletedAt),
+			),
+		)
+		.execute();
+
+	const matches = rows.filter(
+		(row) => normalizeWorkspaceDomain(row.domain) === targetDomain,
+	);
+	const workspaceIds = [...new Set(matches.map((row) => row.workspaceId))];
+	if (workspaceIds.length === 0) {
+		throw new ValidationError(`No active workspace found for domain ${targetDomain}.`);
+	}
+	if (workspaceIds.length > 1) {
+		throw new ValidationError(
+			`Multiple active workspaces found for domain ${targetDomain}; pass --workspace explicitly.`,
+			{ workspaceIds },
+		);
+	}
+
+	const workspaceId = workspaceIds[0] as string;
+	const userIds = [
+		...new Set(
+			matches.filter((row) => row.workspaceId === workspaceId).map((row) => row.userId),
+		),
+	];
+	if (userIds.length === 0) {
+		throw new ValidationError(`Workspace ${workspaceId} has no active member.`);
+	}
+	if (userIds.length > 1) {
+		throw new ValidationError(
+			`Workspace ${workspaceId} has multiple active members; pass --user explicitly.`,
+			{ userIds },
+		);
+	}
+
+	return { workspaceId, userId: userIds[0] as string };
+}
 
 function allowedProvidersForWorkspace(
 	enabledProviders: string[] | null | undefined,
