@@ -66,6 +66,51 @@ function buildProviderReport(records, providers) {
   });
 }
 
+function buildEvidenceManifest(records, report) {
+  return {
+    schemaVersion: "izi.ai-visibility.evidence-manifest.v1",
+    runGroupId: report.runGroupId,
+    runLabel: report.runLabel,
+    promptSetId: report.promptSetId,
+    promptSetVersion: report.promptSetVersion,
+    generatedAt: new Date().toISOString(),
+    pass: report.pass,
+    providers: report.providers,
+    observations: records.map((record) => ({
+      recordId: record.id,
+      provider: record.model_provider,
+      promptExecutionId: record.prompt_id,
+      prompt: record.prompt,
+      captureStatus: record.capture_status ?? "answered",
+      capturedAt: record.captured_at ?? record.prompt_run_at ?? record.created_at,
+      responseLength: record.response?.length ?? 0,
+      sourceCount: record.sources?.length ?? 0,
+      sources: (record.sources ?? []).map((source) => ({
+        title: source.title ?? null,
+        url: source.url ?? null,
+        domain: source.domain ?? null,
+      })),
+      screenshotPath: record.screenshot_path ?? null,
+      visibilityMetadata: record.visibility_metadata ?? null,
+      measurement: record.brand_analysis?.measurement ?? null,
+    })),
+  };
+}
+
+function persistRunArtifacts(runGroupId, report, manifest) {
+  const outputDir = path.resolve(root, ".oneglanse-storage", "visibility-runs", runGroupId);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const reportPath = path.join(outputDir, "acceptance-report.json");
+  const manifestPath = path.join(outputDir, "evidence-manifest.json");
+  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return {
+    outputDir,
+    reportPath,
+    manifestPath,
+  };
+}
+
 async function waitForRun({ services, workspaceId, runGroupId, jobGroupId, timeoutMs }) {
   const deadline = Date.now() + timeoutMs;
   let expectedResponses = null;
@@ -170,8 +215,10 @@ async function main() {
     providers: providerReport,
     pass: providerReport.every((item) => item.pass),
   };
+  const manifest = buildEvidenceManifest(records, report);
+  const artifacts = persistRunArtifacts(submitted.runGroupId, report, manifest);
 
-  console.log(JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({ ...report, artifacts }, null, 2));
   if (!report.pass) process.exitCode = 2;
 }
 
