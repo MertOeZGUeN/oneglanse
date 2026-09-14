@@ -28,13 +28,21 @@ The executable frozen set is `config/visibility/gloria-live-acceptance-v1.json`.
 
 1. Start the local OneGlanse stack and authenticate the four consumer providers through the existing local auth flow.
 2. Ensure there is one active workspace for `gloria.com.tr` with one active local member.
-3. Run:
+3. Run the preflight:
+
+```bash
+pnpm visibility:preflight
+```
+
+The preflight resolves the local Gloria workspace/user, checks workspace provider permissions and reports which of ChatGPT, Claude, Gemini and Perplexity have usable saved consumer sessions. It exits non-zero while a required provider is disabled or unauthenticated, without sending any prompt.
+
+4. Once preflight passes, run:
 
 ```bash
 pnpm visibility:acceptance
 ```
 
-The local CLI now resolves the Gloria workspace and user automatically from the unique active `gloria.com.tr` workspace. It deliberately refuses to guess if multiple matching workspaces or members exist.
+The local CLI resolves the Gloria workspace and user automatically from the unique active `gloria.com.tr` workspace. It deliberately refuses to guess if multiple matching workspaces or members exist.
 
 Explicit IDs are still supported and must be supplied together:
 
