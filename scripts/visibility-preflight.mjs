@@ -4,6 +4,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
+const localAppUrl = "http://localhost:3000";
 
 function readArg(name) {
   const index = process.argv.indexOf(name);
@@ -19,6 +20,20 @@ function parseProviders(raw) {
   const invalid = values.filter((value) => !supported.has(value));
   if (invalid.length) throw new Error(`Unsupported provider(s): ${invalid.join(", ")}`);
   return [...new Set(values)];
+}
+
+async function bootstrapLocalEnv() {
+  const runtimeEntry = path.resolve(root, "scripts/lib/runtime.mjs");
+  const runtime = await import(pathToFileURL(runtimeEntry).href);
+  await runtime.ensureEnvFiles();
+  const localEnv = runtime.buildLocalRuntimeEnv(localAppUrl);
+  for (const [key, value] of Object.entries(localEnv)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = String(value);
+    }
+  }
 }
 
 async function resolveIdentity(services) {
@@ -39,7 +54,7 @@ async function resolveIdentity(services) {
   return { ...resolved, resolvedBy: `domain:${domain}` };
 }
 
-function providerReason({ provider, permitted, authenticated, authStatus }) {
+function providerReason({ permitted, authenticated, authStatus }) {
   if (!permitted) return "disabled_in_workspace";
   if (authenticated) return "ready";
   if (authStatus?.connecting) return "auth_in_progress";
@@ -49,7 +64,13 @@ function providerReason({ provider, permitted, authenticated, authStatus }) {
   return "runtime_auth_unavailable";
 }
 
+function toMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function main() {
+  await bootstrapLocalEnv();
+
   const servicesEntry = path.resolve(root, "packages/services/dist/index.js");
   if (!fs.existsSync(servicesEntry)) {
     throw new Error(
@@ -59,31 +80,41 @@ async function main() {
 
   const services = await import(pathToFileURL(servicesEntry).href);
   const requestedProviders = parseProviders(readArg("--providers"));
-  const identity = await resolveIdentity(services);
-  const workspace = await services.getWorkspaceById({ workspaceId: identity.workspaceId });
-  const workspaceEnabled = workspace.enabledProviders;
+  const authStatuses = await services.readProviderAuthStatuses();
 
+  let identity = null;
+  let workspace = null;
+  let workspaceError = null;
+
+  try {
+    identity = await resolveIdentity(services);
+    workspace = await services.getWorkspaceById({ workspaceId: identity.workspaceId });
+  } catch (error) {
+    workspaceError = toMessage(error);
+  }
+
+  const workspaceEnabled = workspace?.enabledProviders ?? null;
   const permittedProviders = requestedProviders.filter((provider) => {
+    if (!workspace) return true;
     if (!workspaceEnabled) return true;
     const authProvider = services.getAuthProviderForRuntimeProvider(provider);
     return workspaceEnabled.includes(authProvider);
   });
-  const disabledProviders = requestedProviders.filter(
-    (provider) => !permittedProviders.includes(provider),
-  );
+  const disabledProviders = workspace
+    ? requestedProviders.filter((provider) => !permittedProviders.includes(provider))
+    : [];
   const authenticatedProviders =
     await services.readAuthenticatedRuntimeProviders(permittedProviders);
   const missingAuthProviders = permittedProviders.filter(
     (provider) => !authenticatedProviders.includes(provider),
   );
-  const authStatuses = await services.readProviderAuthStatuses();
 
   const providers = requestedProviders.map((provider) => {
     const authProvider = services.getAuthProviderForRuntimeProvider(provider);
     const authStatus = authStatuses.find((item) => item.provider === authProvider) || null;
     const permitted = permittedProviders.includes(provider);
     const authenticated = authenticatedProviders.includes(provider);
-    const reason = providerReason({ provider, permitted, authenticated, authStatus });
+    const reason = providerReason({ permitted, authenticated, authStatus });
     return {
       provider,
       authProvider,
@@ -101,19 +132,27 @@ async function main() {
             ? "Enable this provider for the Gloria workspace."
             : reason === "auth_in_progress"
               ? "Finish the interactive login window, then run preflight again."
-              : "Run the local provider auth flow for this provider, then run preflight again.",
+              : "Run `pnpm auth`, connect this provider in the local Providers screen, then run preflight again.",
     };
   });
 
+  const workspaceReady = Boolean(workspace && identity);
   const report = {
-    schemaVersion: "izi.ai-visibility.preflight.v2",
-    workspace: {
-      id: workspace.id,
-      name: workspace.name,
-      domain: workspace.domain,
-      resolvedBy: identity.resolvedBy,
+    schemaVersion: "izi.ai-visibility.preflight.v3",
+    runtime: {
+      databaseConfigured: Boolean(process.env.DATABASE_URL),
+      databaseReady: workspaceReady,
+      databaseOrWorkspaceError: workspaceError,
     },
-    userId: identity.userId,
+    workspace: workspace
+      ? {
+          id: workspace.id,
+          name: workspace.name,
+          domain: workspace.domain,
+          resolvedBy: identity?.resolvedBy ?? null,
+        }
+      : null,
+    userId: identity?.userId ?? null,
     requestedProviders,
     permittedProviders,
     authenticatedProviders,
@@ -121,7 +160,12 @@ async function main() {
     missingAuthProviders,
     providers,
     authStorage: services.getAuthStorageDiagnostics(),
-    pass: providers.every((provider) => provider.status === "ready"),
+    nextAction: !workspaceReady
+      ? "Start the local OneGlanse runtime with `pnpm local` when you are ready to create/use the Gloria workspace. Provider login readiness can still be inspected above."
+      : providers.some((provider) => provider.status !== "ready")
+        ? "Run `pnpm auth`, finish missing provider logins, then rerun preflight."
+        : "Ready for `pnpm visibility:acceptance`.",
+    pass: workspaceReady && providers.every((provider) => provider.status === "ready"),
   };
 
   console.log(JSON.stringify(report, null, 2));
