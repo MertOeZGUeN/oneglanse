@@ -5,6 +5,7 @@ import type {
 	PromptAnalysis,
 	PromptResponse,
 	Source,
+	VisibilityRunStatus,
 } from "@oneglanse/types";
 import { v4 as uuidv4 } from "uuid";
 import { getWorkspaceById } from "../workspace/index.js";
@@ -21,13 +22,18 @@ async function analysePromptResponse(args: {
 	response: string;
 	prompt: string;
 	sources: Source[];
+	captureStatus: VisibilityRunStatus;
 	promptId?: string;
 }): Promise<BrandAnalysisResult> {
-	const { workspaceId, response, prompt, sources, promptId } = args;
+	const { workspaceId, response, prompt, sources, captureStatus, promptId } = args;
 	void promptId;
 
 	const workspace = await getWorkspaceById({ workspaceId });
 	const gloria = isGloriaWorkspace(workspace.domain);
+	const failureStatus =
+		captureStatus === "answered" || captureStatus === "no_brand"
+			? undefined
+			: captureStatus;
 
 	const result = await runAnalysis({
 		brandDomain: workspace.domain,
@@ -38,6 +44,7 @@ async function analysePromptResponse(args: {
 		response,
 		prompt,
 		sources,
+		captureStatus: failureStatus,
 	});
 
 	result.metadata = {
@@ -70,10 +77,6 @@ export async function analysePromptsForWorkspace(args: {
 		error: string;
 	}> = [];
 
-	// offset advances the cursor independently of ClickHouse mutation completion.
-	// ALTER TABLE UPDATE is async — without OFFSET, the same rows are returned
-	// every iteration until the background mutation finishes, causing duplicate
-	// processing and a potential infinite loop.
 	let offset = 0;
 	let hasMore = true;
 	while (hasMore) {
@@ -111,6 +114,7 @@ export async function analysePromptsForWorkspace(args: {
 					response: resp.response,
 					prompt: resp.prompt,
 					sources: resp.sources ?? [],
+					captureStatus: resp.capture_status ?? "answered",
 					promptId: resp.prompt_id,
 				});
 
