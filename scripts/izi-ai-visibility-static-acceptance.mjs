@@ -99,6 +99,12 @@ check(
 		visibilityJobs.includes("runLabel: args.runLabel"),
 );
 check(
+	"domain resolver refuses ambiguous local identity",
+	visibilityJobs.includes("resolveVisibilityRunIdentityByDomain") &&
+		visibilityJobs.includes("Multiple active workspaces found") &&
+		visibilityJobs.includes("multiple active members"),
+);
+check(
 	"success screenshot evidence captured",
 	retryPolicy.includes("captureEvidenceScreenshot") && retryPolicy.includes('status: "answered"'),
 );
@@ -121,6 +127,13 @@ check(
 		liveRunner.includes("fetchAnalysedPrompts") &&
 		liveRunner.includes("sourceSurfacePass") &&
 		liveRunner.includes('readArg("--run-label")'),
+);
+check(
+	"local runner can auto-resolve Gloria identity by domain",
+	liveRunner.includes("resolveVisibilityRunIdentityByDomain") &&
+		liveRunner.includes('IZI_VISIBILITY_WORKSPACE_DOMAIN') &&
+		liveRunner.includes('"gloria.com.tr"') &&
+		liveRunner.includes("Pass both --workspace and --user together"),
 );
 check(
 	"T0/T1 delta rejects mismatched execution matrices",
