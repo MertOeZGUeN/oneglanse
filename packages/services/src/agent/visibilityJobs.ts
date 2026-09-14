@@ -88,6 +88,7 @@ export async function submitVisibilityPromptSetJobGroup(args: {
 	userId: string;
 	promptSet: VisibilityPromptSet;
 	providers?: Provider[];
+	runLabel?: string;
 }): Promise<SubmitVisibilityJobResult> {
 	const workspace = await getWorkspaceById({ workspaceId: args.workspaceId });
 	const allowedProviders = allowedProvidersForWorkspace(
@@ -96,7 +97,9 @@ export async function submitVisibilityPromptSetJobGroup(args: {
 	);
 
 	const jobGroupId = randomUUID();
-	const prompts = buildVisibilityPromptExecutions(args.promptSet, jobGroupId);
+	const prompts = buildVisibilityPromptExecutions(args.promptSet, jobGroupId, {
+		runLabel: args.runLabel,
+	});
 	if (prompts.length === 0) return { status: "empty" };
 
 	const authenticatedProviders =
