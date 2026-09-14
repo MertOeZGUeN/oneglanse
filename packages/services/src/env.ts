@@ -16,9 +16,6 @@ const ServicesEnvSchema = z.object({
 	REDIS_PASSWORD: z.string().optional(),
 	API_BASE_URL: z.string().url().optional(),
 	INTERNAL_CRON_SECRET: z.string().optional(),
-	OPENAI_API_KEY: z.string().optional(),
-	ANTHROPIC_API_KEY: z.string().optional(),
-	ANALYSIS_LLM_PROVIDER: z.enum(["openai", "claude"]).default("openai"),
 });
 
 export const env = ServicesEnvSchema.parse(process.env);
