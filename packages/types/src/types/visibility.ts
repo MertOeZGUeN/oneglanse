@@ -27,6 +27,15 @@ export interface VisibilityPromptDefinition {
 	repeat?: number;
 }
 
+export interface VisibilityPromptSet {
+	schemaVersion: "izi.ai-visibility.prompt-set.v1";
+	id: string;
+	version: string;
+	name: string;
+	defaultRepeat: number;
+	prompts: VisibilityPromptDefinition[];
+}
+
 export interface VisibilityMeasurementInput {
 	prompt: string;
 	response: string;
