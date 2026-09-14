@@ -5,16 +5,12 @@ import type {
 	PromptResponse,
 } from "@oneglanse/types";
 
-/**
- * Fetch ALL responses (analyzed and unanalyzed) with metadata
- */
 export async function fetchAnalysedPrompts(args: {
 	workspaceId: string;
 	limit?: number;
 }): Promise<AnalysisRecord[]> {
 	const { workspaceId, limit = 10_000 } = args;
 
-	// Query from prompt_responses (source of truth) and join analysis data
 	const result = await clickhouse.query({
 		query: `
             SELECT
@@ -27,6 +23,7 @@ export async function fetchAnalysedPrompts(args: {
                 pr.model_provider,
                 pr.response,
                 pr.sources,
+                pr.capture_status,
                 pr.created_at,
                 pr.is_analysed,
                 pa.brand_analysis as brand_analysis
@@ -48,7 +45,6 @@ export async function fetchAnalysedPrompts(args: {
 		PromptResponse & { brand_analysis?: string | BrandAnalysisResult }
 	>;
 
-	// Transform to flat array - handle both analyzed and unanalyzed
 	const records: AnalysisRecord[] = rows.map((row) => {
 		const parsedBrandAnalysis =
 			row.brand_analysis &&
@@ -70,10 +66,9 @@ export async function fetchAnalysedPrompts(args: {
 			model_provider: row.model_provider,
 			response: row.response || "",
 			sources: row.sources || [],
+			capture_status: row.capture_status ?? "answered",
 			brand_analysis: parsedBrandAnalysis,
 			created_at: row.created_at,
-			// ClickHouse ALTER UPDATE is asynchronous, so prompt_analysis may exist
-			// before prompt_responses.is_analysed flips to true.
 			is_analysed: row.is_analysed === true || parsedBrandAnalysis !== undefined,
 		};
 	});
