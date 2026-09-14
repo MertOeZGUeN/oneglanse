@@ -28,9 +28,7 @@ export const geminiConfig: ProviderConfig = {
 	waitForResponse: (page) => waitForAssistantToFinish(page, "gemini"),
 	extractResponse: (page) => extractAssistantMarkdown(page, "gemini"),
 	beforeRetryHook: resetGeminiPage,
-	// No reset between prompts — session is reused in the same conversation.
-	// Navigating back to gemini.google.com on each prompt adds unnecessary
-	// round-trips and increases detection surface.
+	betweenPromptsHook: resetGeminiPage,
 	extractSources: async (page) => {
 		const btn = await findSourcesButton(page);
 		if (!btn) return [];
