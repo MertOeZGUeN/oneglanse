@@ -97,3 +97,23 @@ export interface VisibilityAggregateResult {
 	shareOfVoice: number;
 	sourceDistribution: Array<{ domain: string; count: number }>;
 }
+
+export interface VisibilityNumericRange {
+	min: number | null;
+	max: number | null;
+}
+
+/**
+ * Repeat variability for a set of observations that callers have already grouped
+ * to the same prompt/provider (or another comparable cohort).
+ */
+export interface VisibilityRepeatSpreadResult {
+	schemaVersion: "izi.ai-visibility.repeat-spread.v1";
+	eligibleObservations: number;
+	mentioned: VisibilityNumericRange;
+	ownedDomainCited: VisibilityNumericRange;
+	top3Presence: VisibilityNumericRange;
+	mentionCount: VisibilityNumericRange;
+	citationCount: VisibilityNumericRange;
+	rankPosition: VisibilityNumericRange;
+}
