@@ -1,5 +1,8 @@
 import type { Source } from "./sources.js";
-import type { VisibilityRunStatus } from "./visibility.js";
+import type {
+	VisibilityPromptExecutionMeta,
+	VisibilityRunStatus,
+} from "./visibility.js";
 
 export interface AskPromptResult {
 	userId: string;
@@ -9,6 +12,9 @@ export interface AskPromptResult {
 	response: string;
 	sources: Source[];
 	captureStatus?: VisibilityRunStatus;
+	screenshotPath?: string | null;
+	capturedAt?: string;
+	visibility?: VisibilityPromptExecutionMeta;
 }
 
 export const PROVIDER_LIST = [
