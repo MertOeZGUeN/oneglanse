@@ -74,6 +74,7 @@ export function buildVisibilityPromptExecutions(
 					runLabel,
 					promptSetId: promptSet.id,
 					promptSetVersion: promptSet.version,
+					promptDefinitionId: prompt.id,
 					promptVersion: prompt.version,
 					language: prompt.language,
 					lens: prompt.lens,
