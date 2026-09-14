@@ -178,9 +178,10 @@ export async function handleJob(job: Job<ProviderJobData>): Promise<boolean> {
 	const payload: PromptPayload = {
 		user_id,
 		workspace_id,
-		prompts: prompts.map(({ id, prompt }) => ({
+		prompts: prompts.map(({ id, prompt, visibility }) => ({
 			id,
 			prompt,
+			visibility,
 		})),
 		created_at: executionTime,
 	};
@@ -238,8 +239,6 @@ export async function handleJob(job: Job<ProviderJobData>): Promise<boolean> {
 				},
 			);
 
-			// agentHandler handles StopProviderRunError internally and returns
-			// partial/empty results — check signal here to still mark as stopped.
 			if (stopController.signal.aborted) {
 				throw new StopProviderRunError(provider);
 			}
@@ -294,10 +293,6 @@ export async function handleJob(job: Job<ProviderJobData>): Promise<boolean> {
 					promptRunAt: executionTime,
 				});
 			} catch (storeErr) {
-				// Extraction succeeded but save failed — log prominently but do not
-				// rethrow. Rethrowing would cause BullMQ to retry the entire job
-				// (re-running the browser and re-querying the AI), which is wasteful
-				// and wrong for a storage failure.
 				plog.error(
 					"❌ failed to persist results to ClickHouse:",
 					toErrorMessage(storeErr),
