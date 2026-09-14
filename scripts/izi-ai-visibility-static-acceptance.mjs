@@ -57,6 +57,7 @@ const schema = read("packages/db/clickhouse-init/schema.sql");
 const storage = read("packages/services/src/prompt/storePromptResponses.ts");
 const liveRunner = read("scripts/run-visibility-prompt-set.mjs");
 const frozenAcceptance = read("config/visibility/gloria-live-acceptance-v1.json");
+const baseline = JSON.parse(read("config/visibility/gloria-baseline-v1.json"));
 
 check("analysis service does not export an LLM client", !serviceIndex.includes("./llm/"));
 check(
@@ -120,6 +121,17 @@ check(
 	"frozen acceptance set contains general and source probes",
 	frozenAcceptance.includes("ACC-GENERAL-001") &&
 		frozenAcceptance.includes("ACC-SOURCES-001"),
+);
+check(
+	"Gloria baseline is 4-language x 4-intent and unbranded",
+	baseline.prompts.length === 16 &&
+		new Set(baseline.prompts.map((prompt) => prompt.language)).size === 4 &&
+		new Set(baseline.prompts.map((prompt) => prompt.intent)).size === 4 &&
+		baseline.prompts.every((prompt) => !/gloria/i.test(prompt.prompt)),
+);
+check(
+	"Gloria baseline repeats each prompt three times",
+	baseline.defaultRepeat === 3 && baseline.prompts.every((prompt) => prompt.repeat === undefined),
 );
 
 const failed = checks.filter((item) => !item.passed);
