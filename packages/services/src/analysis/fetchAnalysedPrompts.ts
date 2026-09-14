@@ -3,7 +3,19 @@ import type {
 	AnalysisRecord,
 	BrandAnalysisResult,
 	PromptResponse,
+	VisibilityPromptExecutionMeta,
 } from "@oneglanse/types";
+
+function parseVisibilityMetadata(raw: string | undefined): VisibilityPromptExecutionMeta | undefined {
+	if (!raw || raw === "{}") return undefined;
+	try {
+		const parsed = JSON.parse(raw) as unknown;
+		if (!parsed || typeof parsed !== "object") return undefined;
+		return parsed as VisibilityPromptExecutionMeta;
+	} catch {
+		return undefined;
+	}
+}
 
 export async function fetchAnalysedPrompts(args: {
 	workspaceId: string;
@@ -24,6 +36,9 @@ export async function fetchAnalysedPrompts(args: {
                 pr.response,
                 pr.sources,
                 pr.capture_status,
+                pr.screenshot_path,
+                pr.captured_at,
+                pr.visibility_metadata,
                 pr.created_at,
                 pr.is_analysed,
                 pa.brand_analysis as brand_analysis
@@ -67,6 +82,9 @@ export async function fetchAnalysedPrompts(args: {
 			response: row.response || "",
 			sources: row.sources || [],
 			capture_status: row.capture_status ?? "answered",
+			screenshot_path: row.screenshot_path || undefined,
+			captured_at: row.captured_at || undefined,
+			visibility_metadata: parseVisibilityMetadata(row.visibility_metadata),
 			brand_analysis: parsedBrandAnalysis,
 			created_at: row.created_at,
 			is_analysed: row.is_analysed === true || parsedBrandAnalysis !== undefined,
