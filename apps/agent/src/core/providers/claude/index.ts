@@ -9,6 +9,7 @@ export const claudeConfig: ProviderConfig = {
 	label: "Claude",
 	displayName: "Claude",
 	beforeRetryHook: resetClaudePage,
+	betweenPromptsHook: resetClaudePage,
 	waitForResponse: (page) => waitForAssistantToFinish(page, "claude"),
 	extractResponse: (page) => extractAssistantMarkdown(page, "claude"),
 	extractSources: (page) => extractSourcesFromClaude(page),
