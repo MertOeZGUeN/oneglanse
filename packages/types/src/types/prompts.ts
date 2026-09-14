@@ -49,5 +49,6 @@ export interface PromptResponse extends PromptAnalysisWithSources {
 	is_analysed: boolean;
 	capture_status: VisibilityRunStatus;
 	screenshot_path: string;
+	captured_at: string;
 	visibility_metadata: string;
 }
