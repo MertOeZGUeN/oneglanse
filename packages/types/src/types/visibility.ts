@@ -16,6 +16,18 @@ export interface VisibilityTrackedEntity {
 	domain?: string;
 }
 
+export interface VisibilityPromptExecutionMeta {
+	runGroupId: string;
+	promptSetId: string;
+	promptSetVersion: string;
+	promptVersion: string;
+	language: string;
+	lens: VisibilityLens;
+	intent: string;
+	repeatIndex: number;
+	repeatTotal: number;
+}
+
 export interface VisibilityPromptDefinition {
 	id: string;
 	version: string;
