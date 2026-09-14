@@ -1,5 +1,10 @@
 import type { BrandMetricMap } from "./metrics.js";
 import type { Source } from "./sources.js";
+import type {
+	VisibilityMeasurementResult,
+	VisibilityRunStatus,
+	VisibilityTrackedEntity,
+} from "./visibility.js";
 
 export interface AnalysisFilters {
 	modelFilter?: string;
@@ -11,27 +16,34 @@ export interface AnalysisFilters {
 export interface AnalysisInputSingle {
 	brandDomain: string;
 	brandName: string;
+	brandAliases?: string[];
 	response: string;
 	prompt: string;
+	sources?: Source[];
+	properties?: VisibilityTrackedEntity[];
+	competitors?: VisibilityTrackedEntity[];
+	captureStatus?: Exclude<VisibilityRunStatus, "answered" | "no_brand">;
 }
 
 export interface BrandAnalysisResult {
-	// Metadata is optional - populated by application code, not from LLM
+	// Metadata is populated by application code.
 	metadata?: {
 		brandName: string;
 		brandDomain: string;
+		analysisMode?: "llm" | "deterministic-v1";
+		legacyCompositeDisabled?: boolean;
 	};
 
 	/**
-	 * THE HEADLINE NUMBER — composite 0-100 score.
-	 * "How well is your brand performing in AI responses?"
+	 * Legacy OneGlanse headline field retained for compatibility.
+	 * In the IZI deterministic fork the legacy composite is disabled and stays 0.
 	 */
 	geoScore: {
 		overall: number;
 	};
 
 	/**
-	 * PRESENCE — Is the brand there? How prominent?
+	 * PRESENCE — binary visibility for the individual observation in deterministic mode.
 	 */
 	presence: {
 		mentioned: boolean;
@@ -39,21 +51,22 @@ export interface BrandAnalysisResult {
 	};
 
 	/**
-	 * POSITION — Where does the brand rank?
+	 * POSITION — absolute position among configured tracked brands in reading order.
 	 */
 	position: {
 		rankPosition: number | null;
 	};
 
 	/**
-	 * SENTIMENT — How favorably is the brand portrayed?
+	 * Legacy semantic field retained for compatibility. Not measured in deterministic mode.
 	 */
 	sentiment: {
 		score: number;
 	};
 
 	/**
-	 * RECOMMENDATION — Is the LLM actively pushing users toward this brand?
+	 * Legacy semantic field retained for compatibility. Deterministic mode only reports
+	 * mentioned_only / not_mentioned and does not infer recommendation intent.
 	 */
 	recommendation: {
 		type:
@@ -66,7 +79,7 @@ export interface BrandAnalysisResult {
 	};
 
 	/**
-	 * COMPETITIVE LANDSCAPE — Who else is in the response and how do they compare?
+	 * COMPETITIVE LANDSCAPE — populated from configured competitors only.
 	 */
 	competitors: {
 		name: string;
@@ -78,7 +91,7 @@ export interface BrandAnalysisResult {
 	}[];
 
 	/**
-	 * BRAND PERCEPTION — What narrative is the LLM building about this brand?
+	 * Legacy semantic field retained for compatibility. Not inferred in deterministic mode.
 	 */
 	perception: {
 		coreClaims: string[];
@@ -93,13 +106,16 @@ export interface BrandAnalysisResult {
 	};
 
 	/**
-	 * RISK ALERTS — Things the brand needs to fix or monitor
+	 * Legacy semantic field retained for compatibility. Not inferred in deterministic mode.
 	 */
 	risks: {
 		items: {
 			severity: "critical" | "warning" | "info";
 		}[];
 	};
+
+	/** Raw, auditable deterministic observation used by IZI AI Visibility. */
+	measurement?: VisibilityMeasurementResult;
 }
 
 export interface AnalysisModelInput {
@@ -139,11 +155,11 @@ export interface AnalysisRecord {
 	response: string;
 	sources: Source[];
 
-	// NEW - Full analysis data (parsed from JSON if available)
-	brand_analysis?: BrandAnalysisResult; // Complete analysis object
+	// Full analysis data (parsed from JSON if available)
+	brand_analysis?: BrandAnalysisResult;
 
 	// Analysis status
-	is_analysed?: boolean; // True if analyzed, false if raw response
+	is_analysed?: boolean;
 
 	// Timestamps
 	created_at: string;
