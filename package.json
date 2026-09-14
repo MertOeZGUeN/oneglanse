@@ -23,6 +23,7 @@
 		"visibility:submit": "pnpm turbo build --filter=@oneglanse/services... && node scripts/run-visibility-prompt-set.mjs",
 		"visibility:acceptance": "pnpm turbo build --filter=@oneglanse/services... && node scripts/run-visibility-prompt-set.mjs --prompt-set config/visibility/gloria-live-acceptance-v1.json --providers chatgpt,claude,gemini,perplexity --wait",
 		"visibility:baseline": "pnpm turbo build --filter=@oneglanse/services... && node scripts/run-visibility-prompt-set.mjs --prompt-set config/visibility/gloria-baseline-v1.json --providers chatgpt,claude,gemini,perplexity --wait",
+		"visibility:delta": "pnpm turbo build --filter=@oneglanse/services... && node scripts/compare-visibility-runs.mjs",
 		"lint": "turbo lint",
 		"typecheck": "turbo typecheck",
 		"clean": "turbo clean && rm -rf node_modules",
