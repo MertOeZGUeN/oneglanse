@@ -55,6 +55,8 @@ const promptRunner = read("apps/agent/src/core/prompt-runner/index.ts");
 const retryPolicy = read("apps/agent/src/core/prompt-runner/retryPolicy.ts");
 const schema = read("packages/db/clickhouse-init/schema.sql");
 const storage = read("packages/services/src/prompt/storePromptResponses.ts");
+const liveRunner = read("scripts/run-visibility-prompt-set.mjs");
+const frozenAcceptance = read("config/visibility/gloria-live-acceptance-v1.json");
 
 check("analysis service does not export an LLM client", !serviceIndex.includes("./llm/"));
 check(
@@ -71,6 +73,11 @@ check(
 check(
 	"failed captures excluded from visibility denominator",
 	deterministic.includes('item.status === "answered" || item.status === "no_brand"'),
+);
+check(
+	"repeat variability is preserved without composite scoring",
+	deterministic.includes("summarizeVisibilityRepeatSpread") &&
+		deterministic.includes('schemaVersion: "izi.ai-visibility.repeat-spread.v1"'),
 );
 check(
 	"versioned prompt sets support repeat and lenses",
@@ -102,6 +109,17 @@ check(
 	["capture_status", "screenshot_path", "visibility_metadata"].every(
 		(field) => schema.includes(field) && storage.includes(field),
 	),
+);
+check(
+	"live acceptance runner is wired to versioned prompt jobs",
+	liveRunner.includes("submitVisibilityPromptSetJobGroup") &&
+		liveRunner.includes("fetchAnalysedPrompts") &&
+		liveRunner.includes("sourceSurfacePass"),
+);
+check(
+	"frozen acceptance set contains general and source probes",
+	frozenAcceptance.includes("ACC-GENERAL-001") &&
+		frozenAcceptance.includes("ACC-SOURCES-001"),
 );
 
 const failed = checks.filter((item) => !item.passed);
