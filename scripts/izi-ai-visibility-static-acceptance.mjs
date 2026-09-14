@@ -57,6 +57,7 @@ const retryPolicy = read("apps/agent/src/core/prompt-runner/retryPolicy.ts");
 const schema = read("packages/db/clickhouse-init/schema.sql");
 const storage = read("packages/services/src/prompt/storePromptResponses.ts");
 const liveRunner = read("scripts/run-visibility-prompt-set.mjs");
+const preflightRunner = read("scripts/visibility-preflight.mjs");
 const deltaRunner = read("scripts/compare-visibility-runs.mjs");
 const frozenAcceptance = read("config/visibility/gloria-live-acceptance-v1.json");
 const baseline = JSON.parse(read("config/visibility/gloria-baseline-v1.json"));
@@ -127,6 +128,21 @@ check(
 		liveRunner.includes("fetchAnalysedPrompts") &&
 		liveRunner.includes("sourceSurfacePass") &&
 		liveRunner.includes('readArg("--run-label")'),
+);
+check(
+	"live runner writes evidence manifest and provider matrix",
+	liveRunner.includes('izi.ai-visibility.evidence-manifest.v1') &&
+		liveRunner.includes('"evidence-manifest.json"') &&
+		liveRunner.includes('"acceptance-report.json"') &&
+		liveRunner.includes("providers: report.providers"),
+);
+check(
+	"preflight exposes provider-specific readiness reasons",
+	preflightRunner.includes('izi.ai-visibility.preflight.v2') &&
+		preflightRunner.includes('"disabled_in_workspace"') &&
+		preflightRunner.includes('"login_required"') &&
+		preflightRunner.includes('"auth_error"') &&
+		preflightRunner.includes('"ready"'),
 );
 check(
 	"local runner can auto-resolve Gloria identity by domain",
