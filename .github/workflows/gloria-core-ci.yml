@@ -8,7 +8,7 @@ on:
 
 jobs:
   typecheck:
-    name: Typecheck
+    name: Typecheck + IZI Acceptance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +21,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: node scripts/izi-ai-visibility-static-acceptance.mjs
