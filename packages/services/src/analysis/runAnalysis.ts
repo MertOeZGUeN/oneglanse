@@ -1,86 +1,71 @@
-import { ExternalServiceError, ValidationError } from "@oneglanse/errors";
 import type { AnalysisInputSingle, BrandAnalysisResult } from "@oneglanse/types";
-import { env } from "../env.js";
-import { chatgpt, claude } from "../llm/index.js";
-import { analysisPrompt } from "./analysisPrompt.js";
+import { measureVisibility } from "./deterministicVisibility.js";
 
-const systemPrompt =
-	"You are an expert brand intelligence analyst. " +
-	"You respond ONLY with valid JSON — no markdown, no code fences, no commentary. " +
-	"Return only valid JSON matching the requested schema. " +
-	"Be precise, evidence-based, and conservative in your scoring. " +
-	"If the brand is not mentioned in the response, return zeroed-out scores and empty arrays rather than fabricating data.";
-
-async function runWithOpenAI(prompt: string, responseLength: number): Promise<string> {
-	let response;
-	try {
-		response = await chatgpt.responses.create({
-			model: "gpt-4.1",
-			temperature: 0,
-			input: [
-				{ role: "system", content: systemPrompt },
-				{ role: "user", content: prompt },
-			],
-			text: { format: { type: "json_object" } },
-		});
-	} catch (err) {
-		throw new ExternalServiceError(
-			"ChatGPT",
-			"Failed to analyze response.",
-			502,
-			{ responseLength },
-			err,
-		);
-	}
-	return response.output_text?.trim() || "";
-}
-
-async function runWithClaude(prompt: string, responseLength: number): Promise<string> {
-	let response;
-	try {
-		response = await claude.messages.create({
-			model: "claude-sonnet-4-6",
-			max_tokens: 4096,
-			temperature: 0,
-			system: systemPrompt,
-			messages: [{ role: "user", content: prompt }],
-		});
-	} catch (err) {
-		throw new ExternalServiceError(
-			"Claude",
-			"Failed to analyze response.",
-			502,
-			{ responseLength },
-			err,
-		);
-	}
-	const block = response.content[0];
-	return block?.type === "text" ? block.text.trim() : "";
-}
-
+/**
+ * API-free analysis path used by the IZI fork.
+ *
+ * The upstream project sends captured responses to OpenAI/Anthropic for semantic
+ * scoring. This fork deliberately does not. It only derives auditable facts from
+ * the rendered response text and captured source URLs.
+ */
 export async function runAnalysis(
 	input: AnalysisInputSingle,
 ): Promise<BrandAnalysisResult> {
-	const prompt = analysisPrompt(input);
+	const measurement = measureVisibility({
+		prompt: input.prompt,
+		response: input.response,
+		sources: input.sources,
+		brand: {
+			name: input.brandName,
+			domain: input.brandDomain,
+			aliases: input.brandAliases,
+		},
+		properties: input.properties,
+		competitors: input.competitors,
+		captureStatus: input.captureStatus,
+	});
 
-	const text =
-		env.ANALYSIS_LLM_PROVIDER === "claude"
-			? await runWithClaude(prompt, input.response.length)
-			: await runWithOpenAI(prompt, input.response.length);
+	const configuredCompetitors = new Map(
+		(input.competitors ?? []).map((competitor) => [competitor.name, competitor]),
+	);
 
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(text);
-	} catch (err) {
-		throw new ValidationError(
-			"Invalid JSON returned from LLM during analysis.",
-			{ rawOutput: text.slice(0, 200) },
-		);
-	}
-
-	if (typeof parsed !== "object" || parsed === null) {
-		throw new ValidationError("Invalid JSON shape", { type: typeof parsed });
-	}
-
-	return parsed as BrandAnalysisResult;
+	return {
+		metadata: {
+			brandName: input.brandName,
+			brandDomain: input.brandDomain,
+			analysisMode: "deterministic-v1",
+			legacyCompositeDisabled: true,
+		},
+		// The old composite score depended on a second LLM call. It is intentionally
+		// disabled rather than replaced with an arbitrary new score.
+		geoScore: { overall: 0 },
+		presence: {
+			mentioned: measurement.brand.mentioned,
+			visibility: measurement.brand.mentioned ? 100 : 0,
+		},
+		position: {
+			rankPosition: measurement.brand.rankPosition,
+		},
+		// Semantic sentiment/recommendation inference is outside deterministic v1.
+		sentiment: { score: 0 },
+		recommendation: {
+			type: measurement.brand.mentioned ? "mentioned_only" : "not_mentioned",
+		},
+		competitors: measurement.competitors.map((competitor) => ({
+			name: competitor.name,
+			domain: configuredCompetitors.get(competitor.name)?.domain ?? "",
+			visibility: competitor.count > 0 ? 100 : 0,
+			sentiment: 0,
+			rankPosition: competitor.rankPosition,
+			isRecommended: false,
+		})),
+		perception: {
+			coreClaims: [],
+			differentiators: [],
+			bestKnownFor: null,
+			pricingPerception: "not_mentioned",
+		},
+		risks: { items: [] },
+		measurement,
+	};
 }
