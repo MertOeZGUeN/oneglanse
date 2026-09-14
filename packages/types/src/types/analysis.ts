@@ -2,6 +2,7 @@ import type { BrandMetricMap } from "./metrics.js";
 import type { Source } from "./sources.js";
 import type {
 	VisibilityMeasurementResult,
+	VisibilityPromptExecutionMeta,
 	VisibilityRunStatus,
 	VisibilityTrackedEntity,
 } from "./visibility.js";
@@ -117,6 +118,9 @@ export interface AnalysisRecord {
 	response: string;
 	sources: Source[];
 	capture_status?: VisibilityRunStatus;
+	screenshot_path?: string;
+	captured_at?: string;
+	visibility_metadata?: VisibilityPromptExecutionMeta;
 	brand_analysis?: BrandAnalysisResult;
 	is_analysed?: boolean;
 	created_at: string;
