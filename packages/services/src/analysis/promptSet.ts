@@ -58,8 +58,10 @@ export function createVisibilityRunGroupId(): string {
 export function buildVisibilityPromptExecutions(
 	promptSet: VisibilityPromptSet,
 	runGroupId = createVisibilityRunGroupId(),
+	options?: { runLabel?: string },
 ): PromptPayload["prompts"] {
 	const executions: PromptPayload["prompts"] = [];
+	const runLabel = options?.runLabel?.trim() || undefined;
 
 	for (const prompt of enabledVisibilityPrompts(promptSet)) {
 		const repeatTotal = repeatCountForPrompt(promptSet, prompt);
@@ -69,6 +71,7 @@ export function buildVisibilityPromptExecutions(
 				prompt: prompt.prompt,
 				visibility: {
 					runGroupId,
+					runLabel,
 					promptSetId: promptSet.id,
 					promptSetVersion: promptSet.version,
 					promptVersion: prompt.version,
