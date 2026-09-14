@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "izi.ai-visibility.prompt-set.v1",
+  "id": "gloria-baseline-v1",
+  "version": "1.0.0",
+  "name": "Gloria AI Visibility Baseline v1",
+  "defaultRepeat": 3,
+  "prompts": [
+    {
+      "id": "EN-GEN-LUX-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "luxury_resort_discovery",
+      "prompt": "Which luxury resorts in Belek are best for a high-end Mediterranean holiday?"
+    },
+    {
+      "id": "EN-GEN-GOLF-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "golf_holiday",
+      "prompt": "Which resorts in Belek are best for a premium golf holiday?"
+    },
+    {
+      "id": "EN-GEN-FAMILY-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "family_luxury",
+      "prompt": "Which luxury resorts in Belek are best for families with children?"
+    },
+    {
+      "id": "EN-GEN-VILLA-001",
+      "version": "1.0.0",
+      "language": "en",
+      "lens": "general",
+      "intent": "villa_premium_stay",
+      "prompt": "Which resorts in Belek offer the best premium villa or private-pool stays?"
+    },
+    {
+      "id": "TR-GEN-LUX-001",
+      "version": "1.0.0",
+      "language": "tr",
+      "lens": "general",
+      "intent": "luxury_resort_discovery",
+      "prompt": "Belek'te üst segment bir Akdeniz tatili için en iyi lüks resort oteller hangileri?"
+    },
+    {
+      "id": "TR-GEN-GOLF-001",
+      "version": "1.0.0",
+      "language": "tr",
+      "lens": "general",
+      "intent": "golf_holiday",
+      "prompt": "Belek'te premium bir golf tatili için en iyi resort oteller hangileri?"
+    },
+    {
+      "id": "TR-GEN-FAMILY-001",
+      "version": "1.0.0",
+      "language": "tr",
+      "lens": "general",
+      "intent": "family_luxury",
+      "prompt": "Belek'te çocuklu aileler için en iyi lüks resort oteller hangileri?"
+    },
+    {
+      "id": "TR-GEN-VILLA-001",
+      "version": "1.0.0",
+      "language": "tr",
+      "lens": "general",
+      "intent": "villa_premium_stay",
+      "prompt": "Belek'te premium villa veya özel havuzlu konaklama için en iyi resort oteller hangileri?"
+    },
+    {
+      "id": "DE-GEN-LUX-001",
+      "version": "1.0.0",
+      "language": "de",
+      "lens": "general",
+      "intent": "luxury_resort_discovery",
+      "prompt": "Welche Luxusresorts in Belek eignen sich am besten für einen hochwertigen Mittelmeerurlaub?"
+    },
+    {
+      "id": "DE-GEN-GOLF-001",
+      "version": "1.0.0",
+      "language": "de",
+      "lens": "general",
+      "intent": "golf_holiday",
+      "prompt": "Welche Resorts in Belek eignen sich am besten für einen Premium-Golfurlaub?"
+    },
+    {
+      "id": "DE-GEN-FAMILY-001",
+      "version": "1.0.0",
+      "language": "de",
+      "lens": "general",
+      "intent": "family_luxury",
+      "prompt": "Welche Luxusresorts in Belek eignen sich am besten für Familien mit Kindern?"
+    },
+    {
+      "id": "DE-GEN-VILLA-001",
+      "version": "1.0.0",
+      "language": "de",
+      "lens": "general",
+      "intent": "villa_premium_stay",
+      "prompt": "Welche Resorts in Belek bieten die besten Premium-Villen oder Unterkünfte mit privatem Pool?"
+    },
+    {
+      "id": "RU-GEN-LUX-001",
+      "version": "1.0.0",
+      "language": "ru",
+      "lens": "general",
+      "intent": "luxury_resort_discovery",
+      "prompt": "Какие роскошные курортные отели в Белеке лучше всего подходят для премиального отдыха на Средиземном море?"
+    },
+    {
+      "id": "RU-GEN-GOLF-001",
+      "version": "1.0.0",
+      "language": "ru",
+      "lens": "general",
+      "intent": "golf_holiday",
+      "prompt": "Какие курортные отели в Белеке лучше всего подходят для премиального гольф-отдыха?"
+    },
+    {
+      "id": "RU-GEN-FAMILY-001",
+      "version": "1.0.0",
+      "language": "ru",
+      "lens": "general",
+      "intent": "family_luxury",
+      "prompt": "Какие роскошные курортные отели в Белеке лучше всего подходят для семей с детьми?"
+    },
+    {
+      "id": "RU-GEN-VILLA-001",
+      "version": "1.0.0",
+      "language": "ru",
+      "lens": "general",
+      "intent": "villa_premium_stay",
+      "prompt": "Какие курортные отели в Белеке предлагают лучшие премиальные виллы или размещение с частным бассейном?"
+    }
+  ]
+}
