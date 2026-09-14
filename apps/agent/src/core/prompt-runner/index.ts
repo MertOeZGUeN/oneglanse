@@ -2,19 +2,56 @@ import {
 	type AskPromptResult,
 	type PromptPayload,
 	type Provider,
+	type VisibilityRunStatus,
 	resolveAppMode,
 	shouldUseProxyInMode,
 } from "@oneglanse/types";
 import type { Page } from "playwright";
-import { IPRefreshNeededError, toErrorMessage } from "@oneglanse/errors";
+import {
+	IPRefreshNeededError,
+	classifyError,
+	toErrorMessage,
+} from "@oneglanse/errors";
 import { logger } from "@oneglanse/utils";
 import { env } from "../../env.js";
 import { PROVIDER_CONFIGS } from "../providers/index.js";
 import { executePromptWithRetry } from "./retryPolicy.js";
 
+function captureStatusForFailure(
+	failureType: ReturnType<typeof classifyError>,
+): VisibilityRunStatus {
+	if (failureType === "logged_out") return "login_required";
+	if (
+		failureType === "bot_detection" ||
+		failureType === "rate_limited" ||
+		failureType === "no_editor"
+	) {
+		return "blocked";
+	}
+	return "capture_error";
+}
+
+function failedPromptResult(args: {
+	userId: string;
+	workspaceId: string;
+	promptEntry: PromptPayload["prompts"][number];
+	status: VisibilityRunStatus;
+}): AskPromptResult {
+	return {
+		userId: args.userId,
+		workspaceId: args.workspaceId,
+		promptId: args.promptEntry.id,
+		prompt: args.promptEntry.prompt,
+		response: "",
+		sources: [],
+		captureStatus: args.status,
+	};
+}
+
 /**
  * Loops over all prompts in the payload and runs each through the retry policy.
- * Propagates IPRefreshNeededError immediately so the outer job handler can rotate the proxy.
+ * Capture failures are preserved as explicit observations so they can never be
+ * mistaken for a valid answer in which the tracked brand was absent.
  */
 export async function runPrompts(
 	payload: PromptPayload,
@@ -43,8 +80,6 @@ export async function runPrompts(
 
 		await onPromptProgress?.(i + 1, promptsArray.length).catch(() => {});
 
-		// IPRefreshNeededError propagates immediately for proxy rotation.
-		// Any other terminal failure skips this prompt and preserves accumulated results.
 		let executeResult: { result: AskPromptResult; proxyNowProven: boolean };
 		try {
 			executeResult = await executePromptWithRetry(
@@ -61,13 +96,43 @@ export async function runPrompts(
 			);
 		} catch (err) {
 			if (err instanceof IPRefreshNeededError) throw err;
+
+			const failureType = classifyError(err);
+			const captureStatus = captureStatusForFailure(failureType);
 			logger.error(
-				`prompt ${i + 1}/${promptsArray.length} failed permanently — skipping: ${toErrorMessage(err)}`,
+				`prompt ${i + 1}/${promptsArray.length} failed permanently — recording ${captureStatus}: ${toErrorMessage(err)}`,
 			);
+			results.push(
+				failedPromptResult({
+					userId,
+					workspaceId,
+					promptEntry,
+					status: captureStatus,
+				}),
+			);
+
+			if (captureStatus === "login_required") {
+				for (const remaining of promptsArray.slice(i + 1)) {
+					results.push(
+						failedPromptResult({
+							userId,
+							workspaceId,
+							promptEntry: remaining,
+							status: "login_required",
+						}),
+					);
+				}
+				break;
+			}
+
+			const hasMorePrompts = i < promptsArray.length - 1;
+			if (config.betweenPromptsHook && hasMorePrompts) {
+				await config.betweenPromptsHook(page).catch(() => {});
+			}
 			continue;
 		}
-		const { result, proxyNowProven } = executeResult;
 
+		const { result, proxyNowProven } = executeResult;
 		results.push(result);
 		if (proxyNowProven) proxyProven = true;
 
@@ -77,6 +142,6 @@ export async function runPrompts(
 		}
 	}
 
-	logger.success(`all ${results.length}/${promptsArray.length} prompts completed`);
+	logger.success(`recorded ${results.length}/${promptsArray.length} prompt observations`);
 	return results;
 }
