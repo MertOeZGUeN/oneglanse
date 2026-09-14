@@ -20,6 +20,8 @@
 		"self-host": "node scripts/run-compose.mjs bootstrap",
 		"self-host:build": "node scripts/run-compose.mjs up -d --build",
 		"self-host:pull": "node scripts/run-compose.mjs pull --ignore-buildable",
+		"visibility:submit": "pnpm turbo build --filter=@oneglanse/services... && node scripts/run-visibility-prompt-set.mjs",
+		"visibility:acceptance": "pnpm turbo build --filter=@oneglanse/services... && node scripts/run-visibility-prompt-set.mjs --prompt-set config/visibility/gloria-live-acceptance-v1.json --providers chatgpt,claude,gemini,perplexity --wait",
 		"lint": "turbo lint",
 		"typecheck": "turbo typecheck",
 		"clean": "turbo clean && rm -rf node_modules",
