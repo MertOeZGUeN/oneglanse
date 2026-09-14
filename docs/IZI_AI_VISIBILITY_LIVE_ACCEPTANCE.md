@@ -15,7 +15,7 @@ No model API may be used for prompt execution or analysis.
 
 ## Frozen test prompts
 
-Use a fresh run group for each acceptance attempt.
+The executable frozen set is `config/visibility/gloria-live-acceptance-v1.json`.
 
 1. `ACC-GENERAL-001`
    - Lens: `general`
@@ -23,6 +23,24 @@ Use a fresh run group for each acceptance attempt.
 2. `ACC-SOURCES-001`
    - Lens: `comparative`
    - Prompt: `Compare several luxury resorts in Belek for golf, family facilities, dining and premium accommodation. Use web sources where available.`
+
+## Running the gate locally
+
+1. Start the local OneGlanse stack and authenticate the four consumer providers through the existing local auth flow.
+2. Set `IZI_VISIBILITY_WORKSPACE_ID` and `IZI_VISIBILITY_USER_ID`, or pass `--workspace` and `--user` explicitly.
+3. Run:
+
+```bash
+pnpm visibility:acceptance
+```
+
+The command builds the service dependencies, queues the frozen prompt set against ChatGPT, Claude, Gemini and Perplexity, waits for storage/analysis to settle, then prints an `izi.ai-visibility.live-acceptance.v1` JSON report. A non-passing provider makes the command exit non-zero.
+
+For arbitrary versioned prompt sets:
+
+```bash
+pnpm visibility:submit -- --workspace <workspace-id> --user <user-id> --prompt-set config/visibility/gloria-v1.example.json --providers chatgpt,claude,gemini,perplexity --wait
+```
 
 ## Provider acceptance matrix
 
@@ -35,8 +53,8 @@ For each provider and each prompt, all applicable checks must pass:
 | Clean chat | The prompt starts in a new/clean conversation |
 | Completion | UI reaches completed answer state |
 | Rendered response | Non-empty rendered answer is extracted from the UI |
-| Sources | Visible citation/source surface is extracted when the provider exposes one |
-| Screenshot | A PNG evidence file is written for the observation |
+| Sources | `ACC-SOURCES-001` produces at least one extracted visible citation/source |
+| Screenshot | A PNG evidence file is written for every observation |
 | Storage | Response, sources, capture status, screenshot path and visibility metadata are persisted |
 | Run metadata | `runGroupId`, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
 | Deterministic analysis | Mention/citation/position metrics are produced without a second model call |
