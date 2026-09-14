@@ -26,6 +26,9 @@ export async function storePromptResponses(
 		response: string;
 		sources: Source[];
 		capture_status: VisibilityRunStatus;
+		screenshot_path: string;
+		captured_at: string;
+		visibility_metadata: string;
 		prompt_run_at: string;
 	}> = [];
 
@@ -53,6 +56,9 @@ export async function storePromptResponses(
 					favicon: s.favicon ?? null,
 				})),
 				capture_status: item.captureStatus ?? "answered",
+				screenshot_path: item.screenshotPath ?? "",
+				captured_at: item.capturedAt ?? "",
+				visibility_metadata: JSON.stringify(item.visibility ?? {}),
 				prompt_run_at: formatDateToClickHouse(new Date(promptRunAt)),
 			});
 		}
@@ -73,6 +79,7 @@ export async function storePromptResponses(
 				prompt: value.prompt.slice(0, 100),
 				prompt_run_at: value.prompt_run_at,
 				capture_status: value.capture_status,
+				screenshot_path: value.screenshot_path,
 				response_length: value.response.length,
 				sources_count: value.sources.length,
 			});
