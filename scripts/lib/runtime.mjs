@@ -178,8 +178,29 @@ const LOCAL_BUILD_PACKAGES = [
 
 export const LOCAL_WATCH_PACKAGES = [...LOCAL_BUILD_PACKAGES];
 
+function resolveSpawnCommand(command, args) {
+	if (command !== "pnpm") {
+		return { command, args };
+	}
+
+	const pnpmCli = process.env.npm_execpath?.trim();
+	if (pnpmCli) {
+		return { command: process.execPath, args: [pnpmCli, ...args] };
+	}
+
+	if (process.platform === "win32") {
+		return {
+			command: process.env.ComSpec || "cmd.exe",
+			args: ["/d", "/s", "/c", "pnpm.cmd", ...args],
+		};
+	}
+
+	return { command, args };
+}
+
 export function spawnCommand(command, args, options = {}) {
-	return spawn(command, args, {
+	const resolved = resolveSpawnCommand(command, args);
+	return spawn(resolved.command, resolved.args, {
 		cwd: repoRoot,
 		stdio: "inherit",
 		env: process.env,
@@ -332,7 +353,8 @@ export async function terminateLocalWorkspacePackageWatchers() {
 
 export function runCommandCapture(command, args, options = {}) {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
+		const resolved = resolveSpawnCommand(command, args);
+		const child = spawn(resolved.command, resolved.args, {
 			cwd: repoRoot,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: process.env,
