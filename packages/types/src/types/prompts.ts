@@ -1,6 +1,9 @@
 import type { AnalysisModelInput } from "./analysis.js";
 import type { SourceLookup } from "./sources.js";
-import type { VisibilityRunStatus } from "./visibility.js";
+import type {
+	VisibilityPromptExecutionMeta,
+	VisibilityRunStatus,
+} from "./visibility.js";
 
 export type UserPrompt = {
 	id: string;
@@ -16,6 +19,7 @@ export type PromptPayload = {
 	prompts: {
 		id: string;
 		prompt: string;
+		visibility?: VisibilityPromptExecutionMeta;
 	}[];
 	created_at: string;
 };
@@ -44,4 +48,6 @@ export interface PromptResponse extends PromptAnalysisWithSources {
 	created_at: string;
 	is_analysed: boolean;
 	capture_status: VisibilityRunStatus;
+	screenshot_path: string;
+	visibility_metadata: string;
 }
