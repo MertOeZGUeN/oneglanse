@@ -39,6 +39,16 @@ async function resolveIdentity(services) {
   return { ...resolved, resolvedBy: `domain:${domain}` };
 }
 
+function providerReason({ provider, permitted, authenticated, authStatus }) {
+  if (!permitted) return "disabled_in_workspace";
+  if (authenticated) return "ready";
+  if (authStatus?.connecting) return "auth_in_progress";
+  if (authStatus?.error) return "auth_error";
+  if (!authStatus?.connected) return "login_required";
+  if (!authStatus?.synced) return "session_not_ready";
+  return "runtime_auth_unavailable";
+}
+
 async function main() {
   const servicesEntry = path.resolve(root, "packages/services/dist/index.js");
   if (!fs.existsSync(servicesEntry)) {
@@ -66,9 +76,37 @@ async function main() {
   const missingAuthProviders = permittedProviders.filter(
     (provider) => !authenticatedProviders.includes(provider),
   );
+  const authStatuses = await services.readProviderAuthStatuses();
+
+  const providers = requestedProviders.map((provider) => {
+    const authProvider = services.getAuthProviderForRuntimeProvider(provider);
+    const authStatus = authStatuses.find((item) => item.provider === authProvider) || null;
+    const permitted = permittedProviders.includes(provider);
+    const authenticated = authenticatedProviders.includes(provider);
+    const reason = providerReason({ provider, permitted, authenticated, authStatus });
+    return {
+      provider,
+      authProvider,
+      permitted,
+      authenticated,
+      status: reason === "ready" ? "ready" : "not_ready",
+      reason,
+      lastUpdatedAt: authStatus?.lastUpdatedAt ?? null,
+      syncedAt: authStatus?.syncedAt ?? null,
+      authError: authStatus?.error ?? null,
+      nextAction:
+        reason === "ready"
+          ? null
+          : reason === "disabled_in_workspace"
+            ? "Enable this provider for the Gloria workspace."
+            : reason === "auth_in_progress"
+              ? "Finish the interactive login window, then run preflight again."
+              : "Run the local provider auth flow for this provider, then run preflight again.",
+    };
+  });
 
   const report = {
-    schemaVersion: "izi.ai-visibility.preflight.v1",
+    schemaVersion: "izi.ai-visibility.preflight.v2",
     workspace: {
       id: workspace.id,
       name: workspace.name,
@@ -81,8 +119,9 @@ async function main() {
     authenticatedProviders,
     disabledProviders,
     missingAuthProviders,
+    providers,
     authStorage: services.getAuthStorageDiagnostics(),
-    pass: disabledProviders.length === 0 && missingAuthProviders.length === 0,
+    pass: providers.every((provider) => provider.status === "ready"),
   };
 
   console.log(JSON.stringify(report, null, 2));
