@@ -2,8 +2,15 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const services = await import(
-  pathToFileURL(path.resolve(process.cwd(), "packages/services/dist/index.js")).href
+const deterministic = await import(
+  pathToFileURL(
+    path.resolve(process.cwd(), "packages/services/dist/analysis/deterministicVisibility.js"),
+  ).href
+);
+const deltaModule = await import(
+  pathToFileURL(
+    path.resolve(process.cwd(), "packages/services/dist/analysis/visibilityDelta.js"),
+  ).href
 );
 
 function assert(condition, message) {
@@ -17,15 +24,15 @@ const source = {
   domain: "gloria.com.tr",
 };
 
-const beforeMeasurement = services.measureVisibility({
+const beforeMeasurement = deterministic.measureVisibility({
   prompt: "Which luxury resorts in Belek are best?",
   response: "Maxx Royal Belek is one option.",
   sources: [],
-  brand: { name: "Gloria Hotels & Resorts", aliases: ["Gloria"] , domain: "gloria.com.tr" },
+  brand: { name: "Gloria Hotels & Resorts", aliases: ["Gloria"], domain: "gloria.com.tr" },
   competitors: [{ name: "Maxx Royal Belek", aliases: ["Maxx Royal"] }],
 });
 
-const afterMeasurement = services.measureVisibility({
+const afterMeasurement = deterministic.measureVisibility({
   prompt: "Which luxury resorts in Belek are best?",
   response: "Gloria Serenity Resort and Maxx Royal Belek are strong options.",
   sources: [source],
@@ -40,18 +47,18 @@ assert(afterMeasurement.brand.mentioned, "Gloria should be detected");
 assert(afterMeasurement.brand.ownedDomainCited, "owned citation should be detected");
 assert(afterMeasurement.properties[0]?.count === 1, "property mention should be detected once");
 
-const blockedMeasurement = services.measureVisibility({
+const blockedMeasurement = deterministic.measureVisibility({
   prompt: "Which luxury resorts in Belek are best?",
   response: "",
   sources: [],
   brand: { name: "Gloria Hotels & Resorts", aliases: ["Gloria"], domain: "gloria.com.tr" },
   captureStatus: "blocked",
 });
-const aggregate = services.aggregateVisibility([afterMeasurement, blockedMeasurement]);
+const aggregate = deterministic.aggregateVisibility([afterMeasurement, blockedMeasurement]);
 assert(aggregate.eligibleObservations === 1, "blocked capture must be excluded from denominator");
 assert(aggregate.mentionRate === 100, "eligible mention rate should remain 100");
 
-const spread = services.summarizeVisibilityRepeatSpread([
+const spread = deterministic.summarizeVisibilityRepeatSpread([
   beforeMeasurement,
   afterMeasurement,
   blockedMeasurement,
@@ -92,7 +99,7 @@ function record(label, measurement, promptVersion = "1.0.0") {
 
 const before = record("T0_PRE_CLOCKWORK_FIXES", beforeMeasurement);
 const after = record("T1_POST_FIXES", afterMeasurement);
-const delta = services.compareVisibilityCohorts(
+const delta = deltaModule.compareVisibilityCohorts(
   [before, after],
   "T0_PRE_CLOCKWORK_FIXES",
   "T1_POST_FIXES",
@@ -103,7 +110,7 @@ assert(delta.deltaPercentagePoints.citationRate === 100, "citation-rate delta sh
 assert(delta.breakdowns.some((row) => row.dimension === "provider" && row.key === "chatgpt"), "provider breakdown should exist");
 
 const mismatchedAfter = record("T1_POST_FIXES", afterMeasurement, "2.0.0");
-const mismatched = services.compareVisibilityCohorts(
+const mismatched = deltaModule.compareVisibilityCohorts(
   [before, mismatchedAfter],
   "T0_PRE_CLOCKWORK_FIXES",
   "T1_POST_FIXES",
