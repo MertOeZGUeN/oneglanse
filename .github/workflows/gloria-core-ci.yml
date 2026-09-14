@@ -22,5 +22,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: node --check scripts/run-visibility-prompt-set.mjs
-      - run: node -e "JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-live-acceptance-v1.json','utf8'))"
+      - run: node --check scripts/compare-visibility-runs.mjs
+      - run: node -e "JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-live-acceptance-v1.json','utf8')); JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-baseline-v1.json','utf8'))"
       - run: node scripts/izi-ai-visibility-static-acceptance.mjs
