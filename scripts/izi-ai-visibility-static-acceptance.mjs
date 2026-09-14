@@ -49,6 +49,7 @@ const serviceIndex = read("packages/services/src/index.ts");
 const serviceEnv = read("packages/services/src/env.ts");
 const runAnalysis = read("packages/services/src/analysis/runAnalysis.ts");
 const deterministic = read("packages/services/src/analysis/deterministicVisibility.ts");
+const visibilityDelta = read("packages/services/src/analysis/visibilityDelta.ts");
 const promptSet = read("packages/services/src/analysis/promptSet.ts");
 const visibilityJobs = read("packages/services/src/agent/visibilityJobs.ts");
 const promptRunner = read("apps/agent/src/core/prompt-runner/index.ts");
@@ -56,6 +57,7 @@ const retryPolicy = read("apps/agent/src/core/prompt-runner/retryPolicy.ts");
 const schema = read("packages/db/clickhouse-init/schema.sql");
 const storage = read("packages/services/src/prompt/storePromptResponses.ts");
 const liveRunner = read("scripts/run-visibility-prompt-set.mjs");
+const deltaRunner = read("scripts/compare-visibility-runs.mjs");
 const frozenAcceptance = read("config/visibility/gloria-live-acceptance-v1.json");
 const baseline = JSON.parse(read("config/visibility/gloria-baseline-v1.json"));
 
@@ -84,6 +86,7 @@ check(
 	"versioned prompt sets support repeat and lenses",
 	promptSet.includes("repeatCountForPrompt") &&
 		promptSet.includes("buildVisibilityPromptExecutions") &&
+		promptSet.includes("promptDefinitionId: prompt.id") &&
 		promptSet.includes('"general"') &&
 		promptSet.includes('"branded"') &&
 		promptSet.includes('"comparative"'),
@@ -92,7 +95,8 @@ check(
 	"prompt-set runner queues real provider jobs",
 	visibilityJobs.includes("buildVisibilityPromptExecutions") &&
 		visibilityJobs.includes("run-provider") &&
-		visibilityJobs.includes("readAuthenticatedRuntimeProviders"),
+		visibilityJobs.includes("readAuthenticatedRuntimeProviders") &&
+		visibilityJobs.includes("runLabel: args.runLabel"),
 );
 check(
 	"success screenshot evidence captured",
@@ -115,7 +119,21 @@ check(
 	"live acceptance runner is wired to versioned prompt jobs",
 	liveRunner.includes("submitVisibilityPromptSetJobGroup") &&
 		liveRunner.includes("fetchAnalysedPrompts") &&
-		liveRunner.includes("sourceSurfacePass"),
+		liveRunner.includes("sourceSurfacePass") &&
+		liveRunner.includes('readArg("--run-label")'),
+);
+check(
+	"T0/T1 delta rejects mismatched execution matrices",
+	visibilityDelta.includes("compareVisibilityCohorts") &&
+		visibilityDelta.includes("Prompt-set id/version differs between cohorts") &&
+		visibilityDelta.includes("Provider/prompt/repeat execution matrix differs between cohorts") &&
+		visibilityDelta.includes("deltaPercentagePoints"),
+);
+check(
+	"delta CLI compares labeled stored cohorts",
+	deltaRunner.includes("compareVisibilityCohorts") &&
+		deltaRunner.includes("T0_PRE_CLOCKWORK_FIXES") &&
+		deltaRunner.includes("T1_POST_FIXES"),
 );
 check(
 	"frozen acceptance set contains general and source probes",
