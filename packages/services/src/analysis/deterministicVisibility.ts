@@ -3,6 +3,8 @@ import type {
 	VisibilityEntityMention,
 	VisibilityMeasurementInput,
 	VisibilityMeasurementResult,
+	VisibilityNumericRange,
+	VisibilityRepeatSpreadResult,
 	VisibilityTrackedEntity,
 } from "@oneglanse/types";
 
@@ -204,5 +206,43 @@ export function aggregateVisibility(
 		sourceDistribution: [...domainCounts.entries()]
 			.map(([domain, count]) => ({ domain, count }))
 			.sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain)),
+	};
+}
+
+function numericRange(values: number[]): VisibilityNumericRange {
+	if (values.length === 0) return { min: null, max: null };
+	return {
+		min: Math.min(...values),
+		max: Math.max(...values),
+	};
+}
+
+/**
+ * Captures run-to-run variability without inventing a composite score. Callers
+ * should group observations to a comparable cohort (normally same provider +
+ * prompt id/version) before invoking this function.
+ */
+export function summarizeVisibilityRepeatSpread(
+	observations: VisibilityMeasurementResult[],
+): VisibilityRepeatSpreadResult {
+	const eligible = observations.filter(
+		(item) => item.status === "answered" || item.status === "no_brand",
+	);
+
+	return {
+		schemaVersion: "izi.ai-visibility.repeat-spread.v1",
+		eligibleObservations: eligible.length,
+		mentioned: numericRange(eligible.map((item) => (item.brand.mentioned ? 1 : 0))),
+		ownedDomainCited: numericRange(
+			eligible.map((item) => (item.brand.ownedDomainCited ? 1 : 0)),
+		),
+		top3Presence: numericRange(eligible.map((item) => (item.brand.top3Presence ? 1 : 0))),
+		mentionCount: numericRange(eligible.map((item) => item.brand.mentionCount)),
+		citationCount: numericRange(eligible.map((item) => item.citations.urls.length)),
+		rankPosition: numericRange(
+			eligible
+				.map((item) => item.brand.rankPosition)
+				.filter((value): value is number => value !== null),
+		),
 	};
 }
