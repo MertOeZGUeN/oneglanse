@@ -119,3 +119,37 @@ export interface VisibilityRepeatSpreadResult {
 	citationCount: VisibilityNumericRange;
 	rankPosition: VisibilityNumericRange;
 }
+
+export interface VisibilityDeltaPercentagePoints {
+	mentionRate: number;
+	citationRate: number;
+	top3PresenceRate: number;
+	shareOfVoice: number;
+}
+
+export type VisibilityDeltaDimension =
+	| "provider"
+	| "language"
+	| "lens"
+	| "intent"
+	| "prompt";
+
+export interface VisibilityDeltaBreakdown {
+	dimension: VisibilityDeltaDimension;
+	key: string;
+	before: VisibilityAggregateResult;
+	after: VisibilityAggregateResult;
+	deltaPercentagePoints: VisibilityDeltaPercentagePoints;
+}
+
+export interface VisibilityDeltaResult {
+	schemaVersion: "izi.ai-visibility.delta.v1";
+	beforeLabel: string;
+	afterLabel: string;
+	comparable: boolean;
+	warnings: string[];
+	before: VisibilityAggregateResult;
+	after: VisibilityAggregateResult;
+	deltaPercentagePoints: VisibilityDeltaPercentagePoints;
+	breakdowns: VisibilityDeltaBreakdown[];
+}
