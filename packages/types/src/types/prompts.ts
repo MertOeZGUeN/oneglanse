@@ -1,5 +1,6 @@
 import type { AnalysisModelInput } from "./analysis.js";
 import type { SourceLookup } from "./sources.js";
+import type { VisibilityRunStatus } from "./visibility.js";
 
 export type UserPrompt = {
 	id: string;
@@ -42,4 +43,5 @@ export interface PromptResponse extends PromptAnalysisWithSources {
 	prompt_run_at: string;
 	created_at: string;
 	is_analysed: boolean;
+	capture_status: VisibilityRunStatus;
 }
