@@ -18,6 +18,7 @@ export interface VisibilityTrackedEntity {
 
 export interface VisibilityPromptExecutionMeta {
 	runGroupId: string;
+	runLabel?: string;
 	promptSetId: string;
 	promptSetVersion: string;
 	promptVersion: string;
