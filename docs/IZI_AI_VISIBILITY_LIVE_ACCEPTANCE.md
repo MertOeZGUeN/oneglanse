@@ -27,19 +27,29 @@ The executable frozen set is `config/visibility/gloria-live-acceptance-v1.json`.
 ## Running the gate locally
 
 1. Start the local OneGlanse stack and authenticate the four consumer providers through the existing local auth flow.
-2. Set `IZI_VISIBILITY_WORKSPACE_ID` and `IZI_VISIBILITY_USER_ID`, or pass `--workspace` and `--user` explicitly.
+2. Ensure there is one active workspace for `gloria.com.tr` with one active local member.
 3. Run:
 
 ```bash
 pnpm visibility:acceptance
 ```
 
+The local CLI now resolves the Gloria workspace and user automatically from the unique active `gloria.com.tr` workspace. It deliberately refuses to guess if multiple matching workspaces or members exist.
+
+Explicit IDs are still supported and must be supplied together:
+
+```bash
+pnpm visibility:acceptance -- --workspace <workspace-id> --user <user-id>
+```
+
+A different workspace domain can be selected with `--domain` or `IZI_VISIBILITY_WORKSPACE_DOMAIN`.
+
 The command builds the service dependencies, queues the frozen prompt set against ChatGPT, Claude, Gemini and Perplexity, waits for storage/analysis to settle, then prints an `izi.ai-visibility.live-acceptance.v1` JSON report. A non-passing provider makes the command exit non-zero.
 
 For arbitrary versioned prompt sets:
 
 ```bash
-pnpm visibility:submit -- --workspace <workspace-id> --user <user-id> --prompt-set config/visibility/gloria-v1.example.json --providers chatgpt,claude,gemini,perplexity --wait
+pnpm visibility:submit -- --prompt-set config/visibility/gloria-v1.example.json --providers chatgpt,claude,gemini,perplexity --wait
 ```
 
 ## Gloria T0/T1 baseline
