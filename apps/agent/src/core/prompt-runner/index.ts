@@ -14,6 +14,7 @@ import {
 } from "@oneglanse/errors";
 import { logger } from "@oneglanse/utils";
 import { env } from "../../env.js";
+import { captureEvidenceScreenshot } from "../../lib/evidence/captureScreenshot.js";
 import { PROVIDER_CONFIGS } from "../providers/index.js";
 import { executePromptWithRetry } from "./retryPolicy.js";
 
@@ -36,6 +37,8 @@ function failedPromptResult(args: {
 	workspaceId: string;
 	promptEntry: PromptPayload["prompts"][number];
 	status: VisibilityRunStatus;
+	screenshotPath?: string | null;
+	capturedAt?: string;
 }): AskPromptResult {
 	return {
 		userId: args.userId,
@@ -45,6 +48,9 @@ function failedPromptResult(args: {
 		response: "",
 		sources: [],
 		captureStatus: args.status,
+		screenshotPath: args.screenshotPath,
+		capturedAt: args.capturedAt,
+		visibility: args.promptEntry.visibility,
 	};
 }
 
@@ -99,6 +105,13 @@ export async function runPrompts(
 
 			const failureType = classifyError(err);
 			const captureStatus = captureStatusForFailure(failureType);
+			const evidence = await captureEvidenceScreenshot({
+				page,
+				provider,
+				workspaceId,
+				promptId: promptEntry.id,
+				status: captureStatus,
+			});
 			logger.error(
 				`prompt ${i + 1}/${promptsArray.length} failed permanently — recording ${captureStatus}: ${toErrorMessage(err)}`,
 			);
@@ -108,6 +121,8 @@ export async function runPrompts(
 					workspaceId,
 					promptEntry,
 					status: captureStatus,
+					screenshotPath: evidence.screenshotPath,
+					capturedAt: evidence.capturedAt,
 				}),
 			);
 
@@ -119,6 +134,7 @@ export async function runPrompts(
 							workspaceId,
 							promptEntry: remaining,
 							status: "login_required",
+							capturedAt: evidence.capturedAt,
 						}),
 					);
 				}
