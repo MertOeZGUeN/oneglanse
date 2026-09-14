@@ -24,8 +24,6 @@ const CANARY_ROTATE_FAILURES = new Set([
 	"bot_detection",
 	"connection_error",
 	"rate_limited",
-	// True editor absence on the first canary attempt usually means the page or
-	// session is unusable; submit-path failures retry locally first.
 	"no_editor",
 ]);
 const REFRESH_ON_RETRY_FAILURES = new Set([
@@ -35,7 +33,6 @@ const REFRESH_ON_RETRY_FAILURES = new Set([
 	"extraction_failed",
 ]);
 
-// Identifies extraction and validation failures that warrant a log warning.
 const EXTRACTION_FAILURE_RE =
 	/Markdown response extraction failed|Empty response extracted|Invalid response/i;
 
@@ -61,17 +58,6 @@ function shouldRotateImmediatelyOnUnprovenProxy(
 	return CANARY_ROTATE_FAILURES.has(failureType);
 }
 
-/**
- * Runs a single prompt through the retry loop with the canary proxy policy applied.
- *
- * Canary policy:
- *   - Unproven proxy + network/bot/rate-limit failure → immediate IP rotation.
- *   - Unproven proxy + local UI/extraction failure    → retry locally up to MAX_RETRIES.
- *   - Proven proxy                                    → up to MAX_RETRIES attempts.
- *
- *
- * Throws IPRefreshNeededError on terminal failure so the caller can rotate the proxy.
- */
 export async function executePromptWithRetry(
 	page: Page,
 	promptEntry: NonNullable<PromptPayload["prompts"][number]>,
@@ -120,6 +106,7 @@ export async function executePromptWithRetry(
 				prompt: promptEntry.prompt,
 				response,
 				sources,
+				captureStatus: "answered",
 			};
 
 			const proxyNowProven = useProxy && !proxyProven;
@@ -204,7 +191,6 @@ export async function executePromptWithRetry(
 		}
 	}
 
-	// Unreachable — the loop always returns or throws.
 	throw new ValidationError(
 		"executePromptWithRetry: unexpected exit without result or error",
 	);
