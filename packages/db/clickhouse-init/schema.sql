@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS analytics.prompt_responses (
         domain Nullable(String),
         favicon Nullable(String)
     )),
+    capture_status LowCardinality(String) DEFAULT 'answered',
     is_analysed Bool DEFAULT false,
     prompt_run_at DateTime,
     created_at DateTime DEFAULT now()
@@ -53,5 +54,6 @@ ORDER BY (
     model_provider
 );
 
--- Migration: Add prompt column if it doesn't exist (safe to run multiple times)
+-- Migrations are safe to run repeatedly on existing local installs.
 ALTER TABLE analytics.prompt_analysis ADD COLUMN IF NOT EXISTS prompt String DEFAULT '';
+ALTER TABLE analytics.prompt_responses ADD COLUMN IF NOT EXISTS capture_status LowCardinality(String) DEFAULT 'answered';
