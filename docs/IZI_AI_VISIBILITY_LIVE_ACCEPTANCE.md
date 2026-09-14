@@ -53,7 +53,15 @@ pnpm visibility:baseline -- --run-label T0_PRE_CLOCKWORK_FIXES
 pnpm visibility:baseline -- --run-label T1_POST_FIXES
 ```
 
-`runLabel` is persisted with every observation so the IZI SEO/GEO module can calculate a like-for-like delta without relying only on timestamps.
+`runLabel` and the canonical prompt definition id are persisted with every observation so the IZI SEO/GEO module can calculate a like-for-like delta without relying only on timestamps.
+
+After both cohorts exist, run:
+
+```bash
+pnpm visibility:delta
+```
+
+The delta command defaults to `T0_PRE_CLOCKWORK_FIXES` versus `T1_POST_FIXES`. It returns overall and provider/language/lens/intent/prompt breakdowns for Mention Rate, Citation Rate, Top-3 Presence and Share of Voice in percentage-point deltas. It marks the comparison `comparable: false` if the prompt-set version or provider/prompt/repeat execution matrix differs between T0 and T1 rather than presenting a misleading change.
 
 ## Provider acceptance matrix
 
@@ -69,7 +77,7 @@ For each provider and each prompt, all applicable checks must pass:
 | Sources | `ACC-SOURCES-001` produces at least one extracted visible citation/source |
 | Screenshot | A PNG evidence file is written for every observation |
 | Storage | Response, sources, capture status, screenshot path and visibility metadata are persisted |
-| Run metadata | `runGroupId`, `runLabel`, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
+| Run metadata | `runGroupId`, `runLabel`, prompt definition id/version, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
 | Deterministic analysis | Mention/citation/position metrics are produced without a second model call |
 
 ## Failure-state acceptance
@@ -94,6 +102,7 @@ Keep the following together under the same run group:
 - exact prompt text
 - run label
 - prompt-set id/version
+- canonical prompt definition id/version
 - language/lens/intent
 - repeat index/total
 - UTC capture timestamp
