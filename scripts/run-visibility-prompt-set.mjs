@@ -96,21 +96,33 @@ async function waitForRun({ services, workspaceId, runGroupId, jobGroupId, timeo
   throw new Error("Provider jobs completed, but analysis/storage did not settle before timeout.");
 }
 
+async function resolveIdentity(services) {
+  const explicitWorkspaceId = readArg("--workspace") || process.env.IZI_VISIBILITY_WORKSPACE_ID;
+  const explicitUserId = readArg("--user") || process.env.IZI_VISIBILITY_USER_ID;
+
+  if (Boolean(explicitWorkspaceId) !== Boolean(explicitUserId)) {
+    throw new Error(
+      "Pass both --workspace and --user together, or omit both and allow domain-based local resolution.",
+    );
+  }
+
+  if (explicitWorkspaceId && explicitUserId) {
+    return { workspaceId: explicitWorkspaceId, userId: explicitUserId, resolvedBy: "explicit" };
+  }
+
+  const domain =
+    readArg("--domain") || process.env.IZI_VISIBILITY_WORKSPACE_DOMAIN || "gloria.com.tr";
+  const resolved = await services.resolveVisibilityRunIdentityByDomain({ domain });
+  return { ...resolved, resolvedBy: `domain:${domain}` };
+}
+
 async function main() {
-  const workspaceId = readArg("--workspace") || process.env.IZI_VISIBILITY_WORKSPACE_ID;
-  const userId = readArg("--user") || process.env.IZI_VISIBILITY_USER_ID;
   const runLabel = readArg("--run-label") || process.env.IZI_VISIBILITY_RUN_LABEL;
   const promptSetPath =
     readArg("--prompt-set") || "config/visibility/gloria-v1.example.json";
   const providers = parseProviders(readArg("--providers"));
   const wait = hasArg("--wait");
   const timeoutMinutes = Number(readArg("--timeout-minutes") || "20");
-
-  if (!workspaceId || !userId) {
-    throw new Error(
-      "Workspace and user are required. Pass --workspace/--user or set IZI_VISIBILITY_WORKSPACE_ID and IZI_VISIBILITY_USER_ID.",
-    );
-  }
 
   const servicesEntry = path.resolve(root, "packages/services/dist/index.js");
   if (!fs.existsSync(servicesEntry)) {
@@ -120,6 +132,7 @@ async function main() {
   }
 
   const services = await import(pathToFileURL(servicesEntry).href);
+  const { workspaceId, userId, resolvedBy } = await resolveIdentity(services);
   const promptSet = loadPromptSet(promptSetPath, services.parseVisibilityPromptSet);
 
   const submitted = await services.submitVisibilityPromptSetJobGroup({
@@ -130,7 +143,13 @@ async function main() {
     runLabel,
   });
 
-  console.log(JSON.stringify({ ...submitted, runLabel: runLabel || null }, null, 2));
+  console.log(
+    JSON.stringify(
+      { ...submitted, workspaceId, userId, resolvedBy, runLabel: runLabel || null },
+      null,
+      2,
+    ),
+  );
   if (!wait || submitted.status !== "queued") return;
 
   const records = await waitForRun({
