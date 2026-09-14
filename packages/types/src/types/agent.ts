@@ -1,4 +1,5 @@
 import type { Source } from "./sources.js";
+import type { VisibilityRunStatus } from "./visibility.js";
 
 export interface AskPromptResult {
 	userId: string;
@@ -7,6 +8,7 @@ export interface AskPromptResult {
 	prompt: string;
 	response: string;
 	sources: Source[];
+	captureStatus?: VisibilityRunStatus;
 }
 
 export const PROVIDER_LIST = [
