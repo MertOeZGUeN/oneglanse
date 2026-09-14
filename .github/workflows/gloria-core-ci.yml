@@ -21,6 +21,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm turbo build --filter=@oneglanse/services...
+      - run: node scripts/izi-ai-visibility-deterministic-smoke.mjs
       - run: node --check scripts/run-visibility-prompt-set.mjs
       - run: node --check scripts/compare-visibility-runs.mjs
       - run: node -e "JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-live-acceptance-v1.json','utf8')); JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-baseline-v1.json','utf8'))"
