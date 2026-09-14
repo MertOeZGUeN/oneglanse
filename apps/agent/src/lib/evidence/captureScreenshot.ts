@@ -34,11 +34,11 @@ export async function captureEvidenceScreenshot(args: {
 
 	try {
 		await fs.mkdir(dir, { recursive: true });
-		await args.page.screenshot({
-			path: screenshotPath,
+		const screenshot = await args.page.screenshot({
 			type: "png",
 			fullPage: true,
 		});
+		await fs.writeFile(screenshotPath, screenshot);
 		return { screenshotPath, capturedAt };
 	} catch (error) {
 		logger.warn(
