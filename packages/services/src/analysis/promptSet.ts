@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type {
+	PromptPayload,
 	VisibilityPromptDefinition,
 	VisibilityPromptSet,
 } from "@oneglanse/types";
@@ -47,4 +49,38 @@ export function repeatCountForPrompt(
 	prompt: VisibilityPromptDefinition,
 ): number {
 	return prompt.repeat ?? promptSet.defaultRepeat;
+}
+
+export function createVisibilityRunGroupId(): string {
+	return randomUUID();
+}
+
+export function buildVisibilityPromptExecutions(
+	promptSet: VisibilityPromptSet,
+	runGroupId = createVisibilityRunGroupId(),
+): PromptPayload["prompts"] {
+	const executions: PromptPayload["prompts"] = [];
+
+	for (const prompt of enabledVisibilityPrompts(promptSet)) {
+		const repeatTotal = repeatCountForPrompt(promptSet, prompt);
+		for (let repeatIndex = 1; repeatIndex <= repeatTotal; repeatIndex++) {
+			executions.push({
+				id: `${prompt.id}::${runGroupId}::r${repeatIndex}`,
+				prompt: prompt.prompt,
+				visibility: {
+					runGroupId,
+					promptSetId: promptSet.id,
+					promptSetVersion: promptSet.version,
+					promptVersion: prompt.version,
+					language: prompt.language,
+					lens: prompt.lens,
+					intent: prompt.intent,
+					repeatIndex,
+					repeatTotal,
+				},
+			});
+		}
+	}
+
+	return executions;
 }
