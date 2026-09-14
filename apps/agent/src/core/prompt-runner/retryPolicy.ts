@@ -14,6 +14,7 @@ import {
 import { exponentialBackoff, logger } from "@oneglanse/utils";
 import type { Page } from "playwright";
 import { env } from "../../env.js";
+import { captureEvidenceScreenshot } from "../../lib/evidence/captureScreenshot.js";
 import { PROVIDER_CONFIGS } from "../providers/index.js";
 import { executePrompt } from "./executePrompt.js";
 
@@ -94,6 +95,13 @@ export async function executePromptWithRetry(
 				promptEntry.prompt,
 				provider,
 			);
+			const evidence = await captureEvidenceScreenshot({
+				page,
+				provider,
+				workspaceId,
+				promptId: promptEntry.id,
+				status: "answered",
+			});
 
 			logger.success(
 				`prompt ${promptIndex + 1}/${totalPrompts} done${attempt > 1 ? ` (attempt ${attempt})` : ""}`,
@@ -107,6 +115,9 @@ export async function executePromptWithRetry(
 				response,
 				sources,
 				captureStatus: "answered",
+				screenshotPath: evidence.screenshotPath,
+				capturedAt: evidence.capturedAt,
+				visibility: promptEntry.visibility,
 			};
 
 			const proxyNowProven = useProxy && !proxyProven;
