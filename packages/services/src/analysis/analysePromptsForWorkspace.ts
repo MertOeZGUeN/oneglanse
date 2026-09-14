@@ -4,31 +4,47 @@ import type {
 	BrandAnalysisResult,
 	PromptAnalysis,
 	PromptResponse,
+	Source,
 } from "@oneglanse/types";
 import { v4 as uuidv4 } from "uuid";
 import { getWorkspaceById } from "../workspace/index.js";
+import {
+	GLORIA_BRAND_ALIASES,
+	GLORIA_COMPETITORS,
+	GLORIA_PROPERTIES,
+	isGloriaWorkspace,
+} from "./gloriaProfile.js";
 import { runAnalysis } from "./runAnalysis.js";
 
 async function analysePromptResponse(args: {
 	workspaceId: string;
 	response: string;
 	prompt: string;
+	sources: Source[];
 	promptId?: string;
 }): Promise<BrandAnalysisResult> {
-	const { workspaceId, response, prompt, promptId } = args;
+	const { workspaceId, response, prompt, sources, promptId } = args;
+	void promptId;
 
 	const workspace = await getWorkspaceById({ workspaceId });
+	const gloria = isGloriaWorkspace(workspace.domain);
 
 	const result = await runAnalysis({
 		brandDomain: workspace.domain,
 		brandName: workspace.name,
+		brandAliases: gloria ? GLORIA_BRAND_ALIASES : undefined,
+		properties: gloria ? GLORIA_PROPERTIES : undefined,
+		competitors: gloria ? GLORIA_COMPETITORS : undefined,
 		response,
 		prompt,
+		sources,
 	});
 
 	result.metadata = {
 		brandName: workspace.name,
 		brandDomain: workspace.domain,
+		analysisMode: "deterministic-v1",
+		legacyCompositeDisabled: true,
 	};
 
 	return result;
@@ -88,13 +104,13 @@ export async function analysePromptsForWorkspace(args: {
 			error: string;
 		}> = [];
 
-		// Analyze each response
 		for (const resp of responses) {
 			try {
 				const analysisResult = await analysePromptResponse({
 					workspaceId: resp.workspace_id,
 					response: resp.response,
 					prompt: resp.prompt,
+					sources: resp.sources ?? [],
 					promptId: resp.prompt_id,
 				});
 
@@ -118,7 +134,6 @@ export async function analysePromptsForWorkspace(args: {
 					errorMessage,
 				);
 
-				// Collect error details for frontend
 				errors.push({
 					responseId: resp.id,
 					modelProvider: resp.model_provider,
@@ -151,23 +166,16 @@ export async function analysePromptsForWorkspace(args: {
 		allErrors = allErrors.concat(errors);
 		offset += batchSize;
 
-		// If not analyzing all, stop after first batch
 		if (!analyzeAll) {
 			hasMore = false;
 		} else {
-			// Check if there are more to process
 			hasMore = responses.length === batchSize;
-			// Give ClickHouse 100ms to process the async ALTER TABLE mutation
-			// before the next SELECT. Without this, a narrow window exists where
-			// the mutation hasn't landed yet and the OFFSET cursor is the only
-			// safeguard against duplicate processing.
 			if (hasMore) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 			}
 		}
 	}
 
-	// Check remaining count
 	const remainingResult = await clickhouse.query({
 		query: `
             SELECT count() as count
