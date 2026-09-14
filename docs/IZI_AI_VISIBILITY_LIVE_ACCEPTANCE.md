@@ -42,6 +42,19 @@ For arbitrary versioned prompt sets:
 pnpm visibility:submit -- --workspace <workspace-id> --user <user-id> --prompt-set config/visibility/gloria-v1.example.json --providers chatgpt,claude,gemini,perplexity --wait
 ```
 
+## Gloria T0/T1 baseline
+
+`config/visibility/gloria-baseline-v1.json` contains 16 unbranded discovery prompts: four intents across TR/EN/DE/RU, repeated three times per provider.
+
+Use the same frozen prompt-set version before and after site changes and distinguish cohorts with `--run-label`:
+
+```bash
+pnpm visibility:baseline -- --run-label T0_PRE_CLOCKWORK_FIXES
+pnpm visibility:baseline -- --run-label T1_POST_FIXES
+```
+
+`runLabel` is persisted with every observation so the IZI SEO/GEO module can calculate a like-for-like delta without relying only on timestamps.
+
 ## Provider acceptance matrix
 
 For each provider and each prompt, all applicable checks must pass:
@@ -56,7 +69,7 @@ For each provider and each prompt, all applicable checks must pass:
 | Sources | `ACC-SOURCES-001` produces at least one extracted visible citation/source |
 | Screenshot | A PNG evidence file is written for every observation |
 | Storage | Response, sources, capture status, screenshot path and visibility metadata are persisted |
-| Run metadata | `runGroupId`, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
+| Run metadata | `runGroupId`, `runLabel`, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
 | Deterministic analysis | Mention/citation/position metrics are produced without a second model call |
 
 ## Failure-state acceptance
@@ -79,6 +92,7 @@ Keep the following together under the same run group:
 - provider
 - prompt execution id
 - exact prompt text
+- run label
 - prompt-set id/version
 - language/lens/intent
 - repeat index/total
