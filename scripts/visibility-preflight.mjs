@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
-const localAppUrl = "http://localhost:3000";
+const authRoot = path.join(root, ".oneglanse-storage", "auth");
+const supported = new Set(["chatgpt", "claude", "gemini", "perplexity"]);
 
 function readArg(name) {
   const index = process.argv.indexOf(name);
@@ -12,7 +12,6 @@ function readArg(name) {
 }
 
 function parseProviders(raw) {
-  const supported = new Set(["chatgpt", "claude", "gemini", "perplexity"]);
   const values = (raw || "chatgpt,claude,gemini,perplexity")
     .split(",")
     .map((value) => value.trim())
@@ -22,157 +21,85 @@ function parseProviders(raw) {
   return [...new Set(values)];
 }
 
-async function bootstrapLocalEnv() {
-  const runtimeEntry = path.resolve(root, "scripts/lib/runtime.mjs");
-  const runtime = await import(pathToFileURL(runtimeEntry).href);
-  await runtime.ensureEnvFiles();
-  const localEnv = runtime.buildLocalRuntimeEnv(localAppUrl);
-  for (const [key, value] of Object.entries(localEnv)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = String(value);
-    }
-  }
-}
-
-async function resolveIdentity(services) {
-  const explicitWorkspaceId = readArg("--workspace") || process.env.IZI_VISIBILITY_WORKSPACE_ID;
-  const explicitUserId = readArg("--user") || process.env.IZI_VISIBILITY_USER_ID;
-
-  if (Boolean(explicitWorkspaceId) !== Boolean(explicitUserId)) {
-    throw new Error("Pass both --workspace and --user together, or omit both for domain resolution.");
-  }
-
-  if (explicitWorkspaceId && explicitUserId) {
-    return { workspaceId: explicitWorkspaceId, userId: explicitUserId, resolvedBy: "explicit" };
-  }
-
-  const domain =
-    readArg("--domain") || process.env.IZI_VISIBILITY_WORKSPACE_DOMAIN || "gloria.com.tr";
-  const resolved = await services.resolveVisibilityRunIdentityByDomain({ domain });
-  return { ...resolved, resolvedBy: `domain:${domain}` };
-}
-
-function providerReason({ permitted, authenticated, authStatus }) {
-  if (!permitted) return "disabled_in_workspace";
-  if (authenticated) return "ready";
-  if (authStatus?.connecting) return "auth_in_progress";
-  if (authStatus?.error) return "auth_error";
-  if (!authStatus?.connected) return "login_required";
-  if (!authStatus?.synced) return "session_not_ready";
-  return "runtime_auth_unavailable";
-}
-
-function toMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function main() {
-  await bootstrapLocalEnv();
-
-  const servicesEntry = path.resolve(root, "packages/services/dist/index.js");
-  if (!fs.existsSync(servicesEntry)) {
-    throw new Error(
-      "packages/services/dist/index.js is missing. Run through the package script so workspace services are built first.",
-    );
-  }
-
-  const services = await import(pathToFileURL(servicesEntry).href);
-  const requestedProviders = parseProviders(readArg("--providers"));
-  const authStatuses = await services.readProviderAuthStatuses();
-
-  let identity = null;
-  let workspace = null;
-  let workspaceError = null;
-
+function readJsonIfExists(filePath) {
+  if (!fs.existsSync(filePath)) return null;
   try {
-    identity = await resolveIdentity(services);
-    workspace = await services.getWorkspaceById({ workspaceId: identity.workspaceId });
-  } catch (error) {
-    workspaceError = toMessage(error);
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
   }
+}
 
-  const workspaceEnabled = workspace?.enabledProviders ?? null;
-  const permittedProviders = requestedProviders.filter((provider) => {
-    if (!workspace) return true;
-    if (!workspaceEnabled) return true;
-    const authProvider = services.getAuthProviderForRuntimeProvider(provider);
-    return workspaceEnabled.includes(authProvider);
-  });
-  const disabledProviders = workspace
-    ? requestedProviders.filter((provider) => !permittedProviders.includes(provider))
-    : [];
-  const authenticatedProviders =
-    await services.readAuthenticatedRuntimeProviders(permittedProviders);
-  const missingAuthProviders = permittedProviders.filter(
-    (provider) => !authenticatedProviders.includes(provider),
-  );
+function providerStatus(provider) {
+  const sessionPath = path.join(authRoot, "sessions", provider, `${provider}-auth.json`);
+  const statusPath = path.join(authRoot, "status", `${provider}.json`);
+  const session = readJsonIfExists(sessionPath);
+  const persistedStatus = readJsonIfExists(statusPath);
+  const cookieCount = Array.isArray(session?.cookies) ? session.cookies.length : 0;
+  const originCount = Array.isArray(session?.origins) ? session.origins.length : 0;
+  const hasSession = cookieCount > 0 || originCount > 0;
 
-  const providers = requestedProviders.map((provider) => {
-    const authProvider = services.getAuthProviderForRuntimeProvider(provider);
-    const authStatus = authStatuses.find((item) => item.provider === authProvider) || null;
-    const permitted = permittedProviders.includes(provider);
-    const authenticated = authenticatedProviders.includes(provider);
-    const reason = providerReason({ permitted, authenticated, authStatus });
-    return {
-      provider,
-      authProvider,
-      permitted,
-      authenticated,
-      status: reason === "ready" ? "ready" : "not_ready",
-      reason,
-      lastUpdatedAt: authStatus?.lastUpdatedAt ?? null,
-      syncedAt: authStatus?.syncedAt ?? null,
-      authError: authStatus?.error ?? null,
-      nextAction:
-        reason === "ready"
-          ? null
-          : reason === "disabled_in_workspace"
-            ? "Enable this provider for the Gloria workspace."
-            : reason === "auth_in_progress"
-              ? "Finish the interactive login window, then run preflight again."
-              : "Run `pnpm auth`, connect this provider in the local Providers screen, then run preflight again.",
-    };
-  });
+  let reason = "ready";
+  if (persistedStatus?.connecting) reason = "auth_in_progress";
+  else if (!hasSession && persistedStatus?.error) reason = "auth_error";
+  else if (!hasSession) reason = "login_required";
 
-  const workspaceReady = Boolean(workspace && identity);
+  return {
+    provider,
+    status: reason === "ready" ? "ready" : "not_ready",
+    reason,
+    sessionPresent: Boolean(session),
+    cookieCount,
+    originCount,
+    lastUpdatedAt: persistedStatus?.lastUpdatedAt ?? null,
+    syncedAt: persistedStatus?.syncedAt ?? null,
+    authError: persistedStatus?.error ?? null,
+    nextAction:
+      reason === "ready"
+        ? null
+        : reason === "auth_in_progress"
+          ? "Finish the visible provider login window, close it, then run preflight again."
+          : `Run \`pnpm visibility:auth -- --providers ${provider}\`, sign in, close the auth window, then run preflight again.`,
+  };
+}
+
+function main() {
+  const requestedProviders = parseProviders(readArg("--providers"));
+  const providers = requestedProviders.map(providerStatus);
+  const readyProviders = providers.filter((item) => item.status === "ready").map((item) => item.provider);
+  const missingAuthProviders = providers
+    .filter((item) => item.status !== "ready")
+    .map((item) => item.provider);
+
   const report = {
-    schemaVersion: "izi.ai-visibility.preflight.v3",
+    schemaVersion: "izi.ai-visibility.preflight.v4",
+    executionMode: "dockerless-local-consumer-ui",
     runtime: {
-      databaseConfigured: Boolean(process.env.DATABASE_URL),
-      databaseReady: workspaceReady,
-      databaseOrWorkspaceError: workspaceError,
+      dockerRequired: false,
+      postgresRequired: false,
+      clickhouseRequired: false,
+      redisRequired: false,
+      storageRoot: path.join(root, ".oneglanse-storage"),
+      authRoot,
     },
-    workspace: workspace
-      ? {
-          id: workspace.id,
-          name: workspace.name,
-          domain: workspace.domain,
-          resolvedBy: identity?.resolvedBy ?? null,
-        }
-      : null,
-    userId: identity?.userId ?? null,
     requestedProviders,
-    permittedProviders,
-    authenticatedProviders,
-    disabledProviders,
+    readyProviders,
     missingAuthProviders,
     providers,
-    authStorage: services.getAuthStorageDiagnostics(),
-    nextAction: !workspaceReady
-      ? "Start the local OneGlanse runtime with `pnpm local` when you are ready to create/use the Gloria workspace. Provider login readiness can still be inspected above."
-      : providers.some((provider) => provider.status !== "ready")
-        ? "Run `pnpm auth`, finish missing provider logins, then rerun preflight."
-        : "Ready for `pnpm visibility:acceptance`.",
-    pass: workspaceReady && providers.every((provider) => provider.status === "ready"),
+    nextAction:
+      missingAuthProviders.length === 0
+        ? "Run `pnpm visibility:acceptance`."
+        : "Run `pnpm visibility:auth` to capture the missing provider sessions, then run preflight again.",
+    pass: missingAuthProviders.length === 0,
   };
 
   console.log(JSON.stringify(report, null, 2));
   if (!report.pass) process.exitCode = 2;
 }
 
-main().catch((error) => {
+try {
+  main();
+} catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
-});
+}
