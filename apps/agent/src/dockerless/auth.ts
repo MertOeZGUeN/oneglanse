@@ -1,4 +1,4 @@
 import { configureDockerlessVisibilityEnv } from "./bootstrap.js";
 
 configureDockerlessVisibilityEnv();
-await import("../auth/cli.js");
+await import("../auth/systemCli.js");
