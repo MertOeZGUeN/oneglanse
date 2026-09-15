@@ -19,8 +19,7 @@ const CAMOUFOX_PYTHON_CANDIDATES = [
 ];
 // Pin the Python wrapper for reproducibility, but let Camoufox resolve the
 // currently published stable browser build. Exact historical browser pins can
-// become stale while `camoufox fetch` installs the current stable binary,
-// leaving launch_options pointed at a non-existent executable.
+// become stale while `camoufox fetch` installs the current stable binary.
 const CAMOUFOX_DEFAULT_PIP_SPEC = "cloverlabs-camoufox==0.5.5";
 const CAMOUFOX_DEFAULT_BROWSER_CHANNEL = "official/stable";
 const PYTHON_VERSION_PROBE = [
@@ -301,8 +300,6 @@ export function buildLocalRuntimeEnv(localAppUrl) {
 		REDIS_PORT: redisPort,
 		CAMOUFOX_HEADLESS_MODE: "headless",
 		CAMOUFOX_LOCALE: localLocale,
-		// Firefox reads MOZ_HEADLESS during process bootstrap. Keep this scoped
-		// to the local desktop runtime so cloud/Xvfb sessions are unaffected.
 		MOZ_HEADLESS: "1",
 	};
 
@@ -355,7 +352,8 @@ export async function terminateLocalWorkspacePackageWatchers() {
 
 export function runCommandCapture(command, args, options = {}) {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
+		const resolved = resolveSpawnCommand(command, args);
+		const child = spawn(resolved.command, resolved.args, {
 			cwd: repoRoot,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: process.env,
@@ -629,5 +627,6 @@ export function waitForChildExit(child, label) {
 					`${label} exited with ${signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`}.`,
 				),
 			);
+		});
 	});
 }
