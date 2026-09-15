@@ -127,7 +127,6 @@ async function runAuthLogin(provider: AuthProvider): Promise<void> {
 		);
 		await waitForAllPagesToClose(browser, context);
 		await capture();
-		await snapshotInFlight?.catch(() => {});
 
 		if (latestState.cookies.length === 0 && latestState.origins.length === 0) {
 			throw new Error(
