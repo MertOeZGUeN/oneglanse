@@ -6,7 +6,6 @@ import { pathToFileURL } from "node:url";
 import {
   buildLocalWorkspacePackages,
   ensureEnvFiles,
-  ensureLocalCamoufoxRuntime,
   repoRoot,
   runCommand,
 } from "./lib/runtime.mjs";
@@ -92,8 +91,8 @@ async function main() {
   const runLabel = readArg("--run-label") || process.env.IZI_VISIBILITY_RUN_LABEL || null;
   const acceptance = hasArg("--acceptance");
 
+  process.env.ONEGLANSE_LOCAL_BROWSER_MODE ||= "system";
   await ensureEnvFiles();
-  await ensureLocalCamoufoxRuntime();
   await buildLocalWorkspacePackages();
 
   const promptSetModule = await import(
@@ -164,6 +163,7 @@ async function main() {
           env: {
             ...process.env,
             ONEGLANSE_APP_MODE: "local",
+            ONEGLANSE_LOCAL_BROWSER_MODE: "system",
             IZI_AI_VISIBILITY_EVIDENCE_DIR: screenshotsDir,
           },
         },
