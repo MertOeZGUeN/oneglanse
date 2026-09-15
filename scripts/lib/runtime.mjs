@@ -17,10 +17,12 @@ const CAMOUFOX_PYTHON_CANDIDATES = [
 	"python3.10",
 	"python3",
 ];
-// Keep local auth/runtime bootstrap reproducible instead of following the
-// floating latest browser channel on every fresh machine.
+// Pin the Python wrapper for reproducibility, but let Camoufox resolve the
+// currently published stable browser build. Exact historical browser pins can
+// become stale while `camoufox fetch` installs the current stable binary,
+// leaving launch_options pointed at a non-existent executable.
 const CAMOUFOX_DEFAULT_PIP_SPEC = "cloverlabs-camoufox==0.5.5";
-const CAMOUFOX_DEFAULT_BROWSER_CHANNEL = "official/stable/135.0.1-beta.24";
+const CAMOUFOX_DEFAULT_BROWSER_CHANNEL = "official/stable";
 const PYTHON_VERSION_PROBE = [
 	"-c",
 	[
@@ -353,8 +355,7 @@ export async function terminateLocalWorkspacePackageWatchers() {
 
 export function runCommandCapture(command, args, options = {}) {
 	return new Promise((resolve, reject) => {
-		const resolved = resolveSpawnCommand(command, args);
-		const child = spawn(resolved.command, resolved.args, {
+		const child = spawn(command, args, {
 			cwd: repoRoot,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: process.env,
@@ -628,6 +629,5 @@ export function waitForChildExit(child, label) {
 					`${label} exited with ${signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`}.`,
 				),
 			);
-		});
 	});
 }
