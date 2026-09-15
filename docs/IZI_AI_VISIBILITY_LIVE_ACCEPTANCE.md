@@ -13,6 +13,8 @@ Run against authenticated consumer sessions for:
 
 No model API may be used for prompt execution or analysis.
 
+The Gloria visibility path is intentionally Dockerless. It does not require PostgreSQL, ClickHouse, Redis, Docker Desktop, WSL, or an upstream OneGlanse workspace. Those services remain part of the original OneGlanse SaaS/local stack, but are not required for the Gloria consumer-UI measurement workflow.
+
 ## Frozen test prompts
 
 The executable frozen set is `config/visibility/gloria-live-acceptance-v1.json`.
@@ -24,40 +26,66 @@ The executable frozen set is `config/visibility/gloria-live-acceptance-v1.json`.
    - Lens: `comparative`
    - Prompt: `Compare several luxury resorts in Belek for golf, family facilities, dining and premium accommodation. Use web sources where available.`
 
-## Running the gate locally
+The deterministic Gloria entity profile is `config/visibility/gloria-profile-v1.json`.
 
-1. Start the local OneGlanse stack and authenticate the four consumer providers through the existing local auth flow.
-2. Ensure there is one active workspace for `gloria.com.tr` with one active local member.
-3. Run the preflight:
+## Dockerless local workflow
+
+Provider sessions are stored under `.oneglanse-storage/auth`. The visibility runner executes providers sequentially on the local machine, writes raw evidence to `.oneglanse-storage/visibility-runs`, and derives metrics without a second model call.
+
+### 1. Check session readiness
 
 ```bash
 pnpm visibility:preflight
 ```
 
-The preflight resolves the local Gloria workspace/user, checks workspace provider permissions and reports which of ChatGPT, Claude, Gemini and Perplexity have usable saved consumer sessions. It exits non-zero while a required provider is disabled or unauthenticated, without sending any prompt.
+Preflight is file-backed only. It does not connect to a database or queue and does not send prompts. It reports each required provider as `ready`, `login_required`, `auth_in_progress`, or `auth_error`.
 
-4. Once preflight passes, run:
+### 2. Authenticate providers
+
+To connect all four providers:
+
+```bash
+pnpm visibility:auth
+```
+
+To connect only one provider:
+
+```bash
+pnpm visibility:auth -- --providers chatgpt
+```
+
+For each provider, finish sign-in in the visible Camoufox window and close the auth window when done. The session is saved locally. No auth upload is required for this workflow.
+
+Run preflight again after login:
+
+```bash
+pnpm visibility:preflight
+```
+
+### 3. Run live acceptance
 
 ```bash
 pnpm visibility:acceptance
 ```
 
-The local CLI resolves the Gloria workspace and user automatically from the unique active `gloria.com.tr` workspace. It deliberately refuses to guess if multiple matching workspaces or members exist.
+The runner expands the frozen versioned prompt set, opens the real authenticated consumer UI for each provider, captures rendered response text, extracted sources, capture status and screenshots, then produces deterministic visibility measurements.
 
-Explicit IDs are still supported and must be supplied together:
+Each run is written under:
 
-```bash
-pnpm visibility:acceptance -- --workspace <workspace-id> --user <user-id>
+```text
+.oneglanse-storage/visibility-runs/<run>/
+├── run.json
+├── evidence-manifest.json
+├── acceptance-report.json
+└── screenshots/
 ```
 
-A different workspace domain can be selected with `--domain` or `IZI_VISIBILITY_WORKSPACE_DOMAIN`.
-
-The command builds the service dependencies, queues the frozen prompt set against ChatGPT, Claude, Gemini and Perplexity, waits for storage/analysis to settle, then prints an `izi.ai-visibility.live-acceptance.v1` JSON report. A non-passing provider makes the command exit non-zero.
+`run.json` contains the raw rendered response, extracted sources and deterministic measurement for every observation. `evidence-manifest.json` is the compact evidence index. `acceptance-report.json` contains the provider PASS/FAIL matrix.
 
 For arbitrary versioned prompt sets:
 
 ```bash
-pnpm visibility:submit -- --prompt-set config/visibility/gloria-v1.example.json --providers chatgpt,claude,gemini,perplexity --wait
+pnpm visibility:submit -- --prompt-set config/visibility/gloria-live-acceptance-v1.json --providers chatgpt,claude
 ```
 
 ## Gloria T0/T1 baseline
@@ -71,7 +99,7 @@ pnpm visibility:baseline -- --run-label T0_PRE_CLOCKWORK_FIXES
 pnpm visibility:baseline -- --run-label T1_POST_FIXES
 ```
 
-`runLabel` and the canonical prompt definition id are persisted with every observation so the IZI SEO/GEO module can calculate a like-for-like delta without relying only on timestamps.
+The local run document persists `runGroupId`, `runLabel`, canonical prompt definition id/version, prompt-set version, provider, language, lens, intent and repeat index with every observation.
 
 After both cohorts exist, run:
 
@@ -79,7 +107,7 @@ After both cohorts exist, run:
 pnpm visibility:delta
 ```
 
-The delta command defaults to `T0_PRE_CLOCKWORK_FIXES` versus `T1_POST_FIXES`. It returns overall and provider/language/lens/intent/prompt breakdowns for Mention Rate, Citation Rate, Top-3 Presence and Share of Voice in percentage-point deltas. It marks the comparison `comparable: false` if the prompt-set version or provider/prompt/repeat execution matrix differs between T0 and T1 rather than presenting a misleading change.
+The local delta command resolves the latest runs labeled `T0_PRE_CLOCKWORK_FIXES` and `T1_POST_FIXES`, validates the prompt-set version and provider/prompt/repeat execution matrix, and only then calculates percentage-point deltas for Mention Rate, Citation Rate, Top-3 Presence and Share of Voice. It writes `delta-report.json` next to the T1 run. A mismatched cohort is returned as `comparable: false` rather than being presented as a clean change.
 
 ## Provider acceptance matrix
 
@@ -94,8 +122,8 @@ For each provider and each prompt, all applicable checks must pass:
 | Rendered response | Non-empty rendered answer is extracted from the UI |
 | Sources | `ACC-SOURCES-001` produces at least one extracted visible citation/source |
 | Screenshot | A PNG evidence file is written for every observation |
-| Storage | Response, sources, capture status, screenshot path and visibility metadata are persisted |
-| Run metadata | `runGroupId`, `runLabel`, prompt definition id/version, prompt-set version, language, lens, intent and repeat index survive round-trip storage |
+| Local evidence | Raw response, sources, capture status, screenshot path and run metadata are written to the run folder |
+| Run metadata | `runGroupId`, `runLabel`, prompt definition id/version, prompt-set version, language, lens, intent and repeat index survive in local evidence |
 | Deterministic analysis | Mention/citation/position metrics are produced without a second model call |
 
 ## Failure-state acceptance
@@ -109,7 +137,7 @@ Expected classifications:
 - completed UI with no usable answer → `no_answer` only when absence of an answer is positively established
 - extraction/runtime failure → `capture_error`
 
-`blocked`, `login_required`, `capture_error` and `no_answer` are excluded from visibility-rate denominators.
+`blocked`, `login_required`, `capture_error` and `no_answer` are excluded from visibility-rate denominators. A completed response that simply does not mention Gloria becomes deterministic `no_brand` while its capture itself remains successful.
 
 ## Evidence required per observation
 
@@ -139,5 +167,6 @@ The fork is eligible for integration into the Gloria SEO/GEO module only when:
 3. ChatGPT, Claude, Gemini and Perplexity each pass both frozen prompts in a real authenticated consumer session.
 4. No provider failure is counted as brand absence.
 5. No model API is required for analysis.
+6. The Gloria visibility commands run without Docker/PostgreSQL/ClickHouse/Redis.
 
 UI drift in any provider is a provider-specific FAIL, not a reason to lower the acceptance criteria.
