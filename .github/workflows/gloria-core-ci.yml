@@ -24,6 +24,7 @@ jobs:
       - run: pnpm turbo build --filter=@oneglanse/services...
       - run: node scripts/izi-ai-visibility-deterministic-smoke.mjs
       - run: node --check scripts/lib/runtime.mjs
+      - run: node --check scripts/run-with-camoufox-runtime.mjs
       - run: node --check scripts/visibility-preflight.mjs
       - run: node --check scripts/visibility-auth.mjs
       - run: node --check scripts/run-visibility-local.mjs
