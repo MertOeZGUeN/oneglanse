@@ -24,7 +24,10 @@ jobs:
       - run: pnpm turbo build --filter=@oneglanse/services...
       - run: node scripts/izi-ai-visibility-deterministic-smoke.mjs
       - run: node --check scripts/visibility-preflight.mjs
+      - run: node --check scripts/visibility-auth.mjs
+      - run: node --check scripts/run-visibility-local.mjs
+      - run: node --check scripts/compare-visibility-local.mjs
       - run: node --check scripts/run-visibility-prompt-set.mjs
       - run: node --check scripts/compare-visibility-runs.mjs
-      - run: node -e "JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-live-acceptance-v1.json','utf8')); JSON.parse(require('node:fs').readFileSync('config/visibility/gloria-baseline-v1.json','utf8'))"
+      - run: node -e "const fs=require('node:fs'); ['config/visibility/gloria-live-acceptance-v1.json','config/visibility/gloria-baseline-v1.json','config/visibility/gloria-profile-v1.json'].forEach(p=>JSON.parse(fs.readFileSync(p,'utf8')))"
       - run: node scripts/izi-ai-visibility-static-acceptance.mjs
