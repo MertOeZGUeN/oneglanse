@@ -1,6 +1,10 @@
+import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import {
 	ensureAuthDirectories,
-	readAuthLaunchSeedState,
+	getAgentAuthRootDir,
 	readPersistedAuthStatus,
 	saveAuthSession,
 	saveReusableIdentitySessions,
@@ -12,17 +16,11 @@ import {
 	AUTH_PROVIDER_CONFIG,
 	getProviderDisplayName,
 } from "@oneglanse/utils";
-import {
-	chromium,
-	firefox,
-	type Browser,
-	type BrowserContext,
-	type BrowserContextOptions,
-} from "playwright-core";
+import { chromium } from "playwright-core";
 import { resolveSystemBrowser } from "../lib/browser/systemBrowser.js";
 
-const SNAPSHOT_INTERVAL_MS = 750;
-const CLOSE_STABILITY_MS = 1_000;
+const PROFILE_CAPTURE_RETRIES = 5;
+const PROFILE_CAPTURE_RETRY_MS = 1_000;
 
 function parseProviderArg(argv: string[]): AuthProvider {
 	const index = argv.indexOf("--provider");
@@ -45,26 +43,58 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForAllPagesToClose(
-	browser: Browser,
-	context: BrowserContext,
-): Promise<void> {
-	let zeroSince: number | null = null;
-	let disconnected = false;
-	browser.once("disconnected", () => {
-		disconnected = true;
-	});
+function matchesDomainSuffix(domain: string, suffixes: readonly string[]): boolean {
+	const normalized = domain.replace(/^\./, "").toLowerCase();
+	return suffixes.some(
+		(suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`),
+	);
+}
 
-	while (!disconnected) {
-		const openPages = context.pages().filter((page) => !page.isClosed()).length;
-		if (openPages === 0) {
-			zeroSince ??= Date.now();
-			if (Date.now() - zeroSince >= CLOSE_STABILITY_MS) return;
-		} else {
-			zeroSince = null;
-		}
-		await sleep(200);
+async function waitForUserConfirmation(providerName: string): Promise<void> {
+	const prompt = createInterface({ input: process.stdin, output: process.stdout });
+	try {
+		await prompt.question(
+			`[auth] Sign in to ${providerName} in the opened normal browser. When the signed-in home screen is visible, close that auth browser window, then press Enter here to capture the session...`,
+		);
+	} finally {
+		prompt.close();
 	}
+}
+
+async function captureProfileStorageState(
+	profileDir: string,
+	executablePath: string,
+): Promise<Awaited<ReturnType<import("playwright-core").BrowserContext["storageState"]>>> {
+	let lastError: unknown = null;
+
+	for (let attempt = 1; attempt <= PROFILE_CAPTURE_RETRIES; attempt += 1) {
+		try {
+			const context = await chromium.launchPersistentContext(profileDir, {
+				executablePath,
+				headless: true,
+				args: [
+					"--disable-background-mode",
+					"--no-first-run",
+					"--no-default-browser-check",
+				],
+			});
+			try {
+				return await context.storageState();
+			} finally {
+				await context.close().catch(() => {});
+			}
+		} catch (error) {
+			lastError = error;
+			if (attempt < PROFILE_CAPTURE_RETRIES) {
+				await sleep(PROFILE_CAPTURE_RETRY_MS);
+			}
+		}
+	}
+
+	const detail = lastError instanceof Error ? lastError.message : String(lastError);
+	throw new Error(
+		`Could not reopen the dedicated auth profile to capture its session. Make sure the auth browser window is fully closed, then retry. Last error: ${detail}`,
+	);
 }
 
 async function runAuthLogin(provider: AuthProvider): Promise<void> {
@@ -75,87 +105,81 @@ async function runAuthLogin(provider: AuthProvider): Promise<void> {
 	}
 
 	ensureAuthDirectories();
-	const seedState = await readAuthLaunchSeedState(provider);
 	const resolvedBrowser = resolveSystemBrowser();
-	const browserType = resolvedBrowser.engine === "firefox" ? firefox : chromium;
+	if (resolvedBrowser.engine !== "chromium") {
+		throw new Error(
+			"Dockerless manual auth currently requires Microsoft Edge or Google Chrome. Set ONEGLANSE_SYSTEM_BROWSER_EXECUTABLE to an installed Edge/Chrome executable.",
+		);
+	}
+
+	const profileDir = path.join(
+		getAgentAuthRootDir(),
+		"native-profiles",
+		provider,
+	);
+	mkdirSync(profileDir, { recursive: true });
+	const entryUrl = resolveAuthEntryUrl(provider);
+
 	console.log(
 		`[auth] Using installed ${resolvedBrowser.label}: ${resolvedBrowser.executablePath}`,
 	);
+	console.log(`[auth] Dedicated profile: ${profileDir}`);
+	console.log(
+		"[auth] Manual login browser is launched directly by Windows, not by Playwright. No CAPTCHA/challenge is automated or bypassed.",
+	);
 
-	const browser = await browserType.launch({
-		executablePath: resolvedBrowser.executablePath,
-		headless: false,
-	});
-	const context = await browser.newContext({
-		viewport: null,
-		...(seedState
-			? {
-					storageState:
-						seedState as BrowserContextOptions["storageState"],
-				}
-			: {}),
-	});
+	const child = spawn(
+		resolvedBrowser.executablePath,
+		[
+			`--user-data-dir=${profileDir}`,
+			"--disable-background-mode",
+			"--no-first-run",
+			"--no-default-browser-check",
+			"--new-window",
+			entryUrl,
+		],
+		{
+			detached: true,
+			stdio: "ignore",
+			windowsHide: false,
+		},
+	);
+	child.unref();
 
-	let latestState = await context.storageState();
-	let snapshotInFlight: Promise<void> | null = null;
-	const capture = () => {
-		if (snapshotInFlight) return snapshotInFlight;
-		snapshotInFlight = context
-			.storageState()
-			.then((state) => {
-				latestState = state;
-			})
-			.catch(() => {})
-			.finally(() => {
-				snapshotInFlight = null;
-			});
-		return snapshotInFlight;
-	};
-	const interval = setInterval(() => {
-		void capture();
-	}, SNAPSHOT_INTERVAL_MS);
+	const providerName = getProviderDisplayName(runtimeProvider);
+	await waitForUserConfirmation(providerName);
+	await sleep(750);
 
-	try {
-		const page = await context.newPage();
-		page.on("domcontentloaded", () => void capture());
-		page.on("load", () => void capture());
-		page.on("close", () => void capture());
-		context.on("page", (newPage) => {
-			newPage.on("domcontentloaded", () => void capture());
-			newPage.on("load", () => void capture());
-			newPage.on("close", () => void capture());
-		});
-
-		const entryUrl = resolveAuthEntryUrl(provider);
-		await page.goto(entryUrl, {
-			waitUntil: "domcontentloaded",
-			timeout: 30_000,
-		});
-		if (provider === "chatgpt") {
-			console.log(
-				"[auth] ChatGPT home opened. Click Log in manually in this browser; the script will not force the /auth/login route.",
+	const latestState = await captureProfileStorageState(
+		profileDir,
+		resolvedBrowser.executablePath,
+	);
+	const providerCookies = latestState.cookies.filter((cookie) =>
+		matchesDomainSuffix(cookie.domain, authConfig.domainSuffixes),
+	);
+	const providerOrigins = latestState.origins.filter((originEntry) => {
+		try {
+			return matchesDomainSuffix(
+				new URL(originEntry.origin).hostname,
+				authConfig.domainSuffixes,
 			);
+		} catch {
+			return false;
 		}
-		console.log(
-			`[auth] Sign in to ${getProviderDisplayName(runtimeProvider)} in the opened browser, then close all browser windows from this auth session.`,
+	});
+
+	if (providerCookies.length === 0 && providerOrigins.length === 0) {
+		throw new Error(
+			`${providerName} profile contains no provider session data. Complete the login in the opened browser before pressing Enter.`,
 		);
-		await waitForAllPagesToClose(browser, context);
-		await capture();
-
-		if (latestState.cookies.length === 0 && latestState.origins.length === 0) {
-			throw new Error(
-				`${getProviderDisplayName(runtimeProvider)} sign-in window was closed before a reusable session was captured.`,
-			);
-		}
-
-		await saveReusableIdentitySessions(latestState);
-		const savedState = await saveAuthSession(provider, latestState);
-		await uploadAuthSession(provider, savedState);
-	} finally {
-		clearInterval(interval);
-		await context.close().catch(() => {});
-		await browser.close().catch(() => {});
 	}
+
+	await saveReusableIdentitySessions(latestState);
+	const savedState = await saveAuthSession(provider, latestState);
+	await uploadAuthSession(provider, savedState);
+	console.log(
+		`[auth] Captured ${providerName} session (${providerCookies.length} provider cookies, ${providerOrigins.length} provider origins).`,
+	);
 }
 
 const provider = parseProviderArg(process.argv.slice(2));
