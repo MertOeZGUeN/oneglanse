@@ -2,7 +2,6 @@ import process from "node:process";
 import {
   buildLocalWorkspacePackages,
   ensureEnvFiles,
-  ensureLocalCamoufoxRuntime,
   runCommand,
 } from "./lib/runtime.mjs";
 
@@ -24,8 +23,8 @@ function parseProviders(raw) {
 }
 
 async function main() {
+  process.env.ONEGLANSE_LOCAL_BROWSER_MODE ||= "system";
   await ensureEnvFiles();
-  await ensureLocalCamoufoxRuntime();
   await buildLocalWorkspacePackages();
 
   const providers = parseProviders(readArg("--providers"));
