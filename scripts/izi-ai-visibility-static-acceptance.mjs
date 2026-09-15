@@ -46,6 +46,9 @@ const localAuth = read("scripts/visibility-auth.mjs");
 const localAgentRunner = read("apps/agent/src/dockerless/runVisibility.ts");
 const localAgentAuth = read("apps/agent/src/dockerless/auth.ts");
 const localBootstrap = read("apps/agent/src/dockerless/bootstrap.ts");
+const systemAuth = read("apps/agent/src/auth/systemCli.ts");
+const systemBrowser = read("apps/agent/src/lib/browser/systemBrowser.ts");
+const browserLaunch = read("apps/agent/src/lib/browser/launch.ts");
 const preflight = read("scripts/visibility-preflight.mjs");
 const delta = read("scripts/compare-visibility-local.mjs");
 const frozenAcceptance = JSON.parse(read("config/visibility/gloria-live-acceptance-v1.json"));
@@ -99,10 +102,20 @@ check(
 		localAgentRunner.includes('import("../core/prompt-runner/index.js")'),
 );
 check(
-	"Dockerless auth uses visible consumer login CLI",
-	localAuth.includes("ensureLocalCamoufoxRuntime") &&
+	"Dockerless auth uses an installed consumer browser and persists reusable sessions",
+	!localAuth.includes("ensureLocalCamoufoxRuntime") &&
 		localAuth.includes("src/dockerless/auth.ts") &&
-		localAgentAuth.includes('import("../auth/cli.js")'),
+		localAgentAuth.includes('import("../auth/systemCli.js")') &&
+		systemAuth.includes("resolveSystemBrowser") &&
+		systemAuth.includes("saveAuthSession") &&
+		systemBrowser.includes("Microsoft Edge"),
+);
+check(
+	"Dockerless runtime uses installed browser mode without changing cloud browser behavior",
+	localBootstrap.includes('ONEGLANSE_LOCAL_BROWSER_MODE ||= "system"') &&
+		browserLaunch.includes("resolveSystemBrowser") &&
+		browserLaunch.includes("shouldUseLocalSystemBrowser") &&
+		browserLaunch.includes("resolveCamoufoxLaunchOptions"),
 );
 check(
 	"Dockerless bootstrap never requires live infrastructure services",
