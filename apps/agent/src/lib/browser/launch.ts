@@ -11,7 +11,7 @@ import {
 } from "@oneglanse/types";
 import { logger } from "@oneglanse/utils";
 import type { Browser, BrowserContext } from "playwright";
-import { firefox } from "playwright-core";
+import { chromium, firefox } from "playwright-core";
 import { env } from "../../env.js";
 import {
 	type CamoufoxProxyConfig,
@@ -25,6 +25,7 @@ import {
 	type UpstreamProxyConfig,
 	checkProxyReachable,
 } from "./proxy/forwarder.js";
+import { resolveSystemBrowser } from "./systemBrowser.js";
 
 const DEFAULT_PROXY_PORT: Record<ProxyScheme, number> = {
 	http: 80,
@@ -33,15 +34,10 @@ const DEFAULT_PROXY_PORT: Record<ProxyScheme, number> = {
 const THORDATA_PROXY_API_TIMEOUT_MS = 10_000;
 const leasedThorDataProxyUrls = new Set<string>();
 
-// Serialize all proxy acquisitions to prevent race conditions where two
-// providers fetch the same list and pick the same entry before either has
-// added it to the leased set.
 let proxyAcquisitionLock = Promise.resolve();
 
-// Proxy quarantine — hosts that trigger bot detection or hard failures are
-// quarantined for a cooldown period so they are not immediately reused.
-const QUARANTINE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const quarantinedProxies = new Map<string, number>(); // host:port → expiry
+const QUARANTINE_TTL_MS = 10 * 60 * 1000;
+const quarantinedProxies = new Map<string, number>();
 
 type FirefoxLaunchOptions = NonNullable<Parameters<typeof firefox.launch>[0]>;
 function resolveRuntimeHeadlessMode(): "virtual" | "headful" | "headless" {
@@ -56,9 +52,6 @@ function resolveRuntimeHeadlessMode(): "virtual" | "headful" | "headless" {
 
 	const appMode = resolveAppMode(env.ONEGLANSE_APP_MODE);
 	if (appMode === "local") {
-		// Local runs should stay headless by default, but they must still reuse
-		// the persistent runtime profile rather than falling back to a fresh
-		// one-off storageState context.
 		return "headless";
 	}
 
@@ -250,6 +243,13 @@ function toCamoufoxProxyConfig(
 	};
 }
 
+function shouldUseLocalSystemBrowser(appMode: ReturnType<typeof resolveAppMode>): boolean {
+	return (
+		appMode === "local" &&
+		process.env.ONEGLANSE_LOCAL_BROWSER_MODE?.trim().toLowerCase() === "system"
+	);
+}
+
 export async function launchContext(provider: Provider): Promise<{
 	browser: Browser;
 	context: BrowserContext;
@@ -275,6 +275,7 @@ export async function launchContext(provider: Provider): Promise<{
 	try {
 		const appMode = resolveAppMode(env.ONEGLANSE_APP_MODE);
 		const runtimeHeadlessMode = resolveRuntimeHeadlessMode();
+		const useSystemBrowser = shouldUseLocalSystemBrowser(appMode);
 		if (shouldUseProxyInMode(appMode)) {
 			logger.log("resolving proxy before browser launch");
 			const proxyAllocation = await buildProxyAllocation();
@@ -305,25 +306,42 @@ export async function launchContext(provider: Provider): Promise<{
 		}
 
 		displayHandle =
-			runtimeHeadlessMode === "headless"
-				? null
-				: await ensureDisplay({ allowExistingDisplay: false });
+			!useSystemBrowser && runtimeHeadlessMode !== "headless"
+				? await ensureDisplay({ allowExistingDisplay: false })
+				: null;
 		const display =
 			runtimeHeadlessMode === "headless" ? undefined : displayHandle?.display;
 
 		ensureAuthDirectories();
 		const runtimeSeedPlan = await getRuntimeProfileSeedPlan(provider);
 
-		const camoufoxOptions = await resolveCamoufoxLaunchOptions({
-			display,
-			provider,
-			proxy: toCamoufoxProxyConfig(upstreamProxy),
-			headlessMode: runtimeHeadlessMode,
-		});
-		const launchOptions: FirefoxLaunchOptions = {
-			...(camoufoxOptions as FirefoxLaunchOptions),
-		};
-		rawBrowser = await firefox.launch(launchOptions);
+		if (useSystemBrowser) {
+			const resolvedBrowser = resolveSystemBrowser();
+			const browserType =
+				resolvedBrowser.engine === "firefox" ? firefox : chromium;
+			logger.log(
+				`launching local system browser: ${resolvedBrowser.label} (${resolvedBrowser.executablePath})`,
+			);
+			rawBrowser = await browserType.launch({
+				executablePath: resolvedBrowser.executablePath,
+				headless: runtimeHeadlessMode === "headless",
+				...(upstreamProxy
+					? { proxy: toCamoufoxProxyConfig(upstreamProxy) }
+					: {}),
+			});
+		} else {
+			const camoufoxOptions = await resolveCamoufoxLaunchOptions({
+				display,
+				provider,
+				proxy: toCamoufoxProxyConfig(upstreamProxy),
+				headlessMode: runtimeHeadlessMode,
+			});
+			const launchOptions: FirefoxLaunchOptions = {
+				...(camoufoxOptions as FirefoxLaunchOptions),
+			};
+			rawBrowser = await firefox.launch(launchOptions);
+		}
+
 		rawContext = await rawBrowser.newContext({
 			...(runtimeHeadlessMode === "headless" ? {} : { viewport: null }),
 			...(runtimeSeedPlan.authStatePath
