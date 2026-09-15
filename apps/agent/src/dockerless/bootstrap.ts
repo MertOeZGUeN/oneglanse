@@ -2,6 +2,7 @@ import path from "node:path";
 
 export function configureDockerlessVisibilityEnv(): void {
 	process.env.ONEGLANSE_APP_MODE = "local";
+	process.env.ONEGLANSE_LOCAL_BROWSER_MODE ||= "system";
 	process.env.AGENT_AUTH_ROOT_DIR ||= path.resolve(
 		process.cwd(),
 		"..",
