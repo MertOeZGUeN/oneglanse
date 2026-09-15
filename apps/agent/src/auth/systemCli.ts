@@ -33,6 +33,14 @@ function parseProviderArg(argv: string[]): AuthProvider {
 	return value as AuthProvider;
 }
 
+function resolveAuthEntryUrl(provider: AuthProvider): string {
+	const authConfig = AUTH_PROVIDER_CONFIG[provider];
+	if (provider === "chatgpt") {
+		return authConfig.postLoginUrls[0] || "https://chatgpt.com/";
+	}
+	return authConfig.loginUrl;
+}
+
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -118,10 +126,16 @@ async function runAuthLogin(provider: AuthProvider): Promise<void> {
 			newPage.on("close", () => void capture());
 		});
 
-		await page.goto(authConfig.loginUrl, {
+		const entryUrl = resolveAuthEntryUrl(provider);
+		await page.goto(entryUrl, {
 			waitUntil: "domcontentloaded",
 			timeout: 30_000,
 		});
+		if (provider === "chatgpt") {
+			console.log(
+				"[auth] ChatGPT home opened. Click Log in manually in this browser; the script will not force the /auth/login route.",
+			);
+		}
 		console.log(
 			`[auth] Sign in to ${getProviderDisplayName(runtimeProvider)} in the opened browser, then close all browser windows from this auth session.`,
 		);
