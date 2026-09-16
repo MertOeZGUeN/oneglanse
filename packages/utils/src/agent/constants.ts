@@ -68,8 +68,14 @@ export const PROVIDER_MODEL_RESPONSE_SELECTORS: Record<Provider, string[]> = {
 		'[data-testid^="conversation-turn"][data-turn="assistant"]'
 	],
 	perplexity: [
+		'[data-testid="answer-content"]',
+		'[data-testid="answer"]',
+		'div[id^="Markdown-Content-"]',
 		'div[id^="markdown-content-"]',
-		'[id^="markdown-content-"] .prose'
+		'[id^="Markdown-Content-"] .prose',
+		'[id^="markdown-content-"] .prose',
+		'.prose.text-pretty.dark\\:prose-invert',
+		'[class*="prose"][class*="prose-invert"]'
 	],
 	gemini: ['message-content .markdown'],
 	claude: [
