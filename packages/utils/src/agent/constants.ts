@@ -25,9 +25,16 @@ export const PROVIDER_EDITOR_SELECTORS: Record<Provider, string[]> = {
 	],
 	perplexity: [
 		'#ask-input',
+		'textarea#ask-input',
+		'#ask-input textarea',
+		'#ask-input [contenteditable="true"]',
+		'textarea[placeholder*="Ask anything" i]',
+		'textarea[aria-label*="Ask" i]',
 		'div#ask-input[contenteditable="true"][role="textbox"]',
 		'div[role="textbox"][data-lexical-editor="true"]',
-		'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]'
+		'div[contenteditable="true"][role="textbox"][data-lexical-editor="true"]',
+		'div[contenteditable="true"][role="textbox"]',
+		'textarea[role="textbox"]'
 	],
 	gemini: [
 		'div[aria-label="Enter a prompt for Gemini"]',
@@ -44,7 +51,12 @@ export const PROVIDER_EDITOR_SELECTORS: Record<Provider, string[]> = {
 
 export const PROVIDER_SUBMIT_BTN_SELECTORS: Record<Provider, string[]> = {
 	chatgpt: ['button[data-testid="send-button"]'],
-	perplexity: ['button[aria-label*="Submit"]'],
+	perplexity: [
+		'button[aria-label*="Submit" i]',
+		'button[aria-label*="Send" i]',
+		'button[data-testid*="submit" i]',
+		'button[type="submit"]'
+	],
 	gemini: ['button[aria-label*="Send"]'],
 	claude: ['button[aria-label*="Send"]'],
 	"ai-overview": [],
