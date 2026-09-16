@@ -61,6 +61,7 @@ function providerAcceptance(records, provider, expectedExecutions) {
   const rows = records.filter((record) => record.provider === provider);
   const sourceProbe = rows.find((record) => record.promptDefinitionId === "ACC-SOURCES-001");
   const failures = [];
+  const warnings = [];
 
   if (rows.length !== expectedExecutions) {
     failures.push(`expected ${expectedExecutions} observations, received ${rows.length}`);
@@ -73,14 +74,34 @@ function providerAcceptance(records, provider, expectedExecutions) {
   if (rows.some((row) => !row.screenshotPath)) failures.push("one or more evidence screenshots are missing");
   if (rows.some((row) => !row.measurement)) failures.push("one or more deterministic measurements are missing");
   if (!sourceProbe || (sourceProbe.sources?.length ?? 0) === 0) {
-    failures.push("ACC-SOURCES-001 exposed no visible source URLs");
+    warnings.push("ACC-SOURCES-001 exposed no visible source URLs; source absence is recorded as data, not treated as a provider capture failure");
   }
 
   return {
     provider,
     observations: rows.length,
     failures,
+    warnings,
     pass: failures.length === 0,
+  };
+}
+
+function acceptanceSourceGate(records, providers) {
+  const providersWithVisibleSources = providers.filter((provider) => {
+    const sourceProbe = records.find(
+      (record) =>
+        record.provider === provider && record.promptDefinitionId === "ACC-SOURCES-001",
+    );
+    return (sourceProbe?.sources?.length ?? 0) > 0;
+  });
+  const pass = providersWithVisibleSources.length > 0;
+  return {
+    promptDefinitionId: "ACC-SOURCES-001",
+    providersWithVisibleSources,
+    pass,
+    failure: pass
+      ? null
+      : "ACC-SOURCES-001 exposed no visible source URLs on any provider; source extraction has not been demonstrated live",
   };
 }
 
@@ -289,13 +310,15 @@ async function main() {
     const providerReports = providers.map((provider) =>
       providerAcceptance(observations, provider, executions.length),
     );
+    const sourceGate = acceptanceSourceGate(observations, providers);
     acceptanceReport = {
-      schemaVersion: "izi.ai-visibility.live-acceptance.v2",
+      schemaVersion: "izi.ai-visibility.live-acceptance.v3",
       runGroupId,
       promptSetId: promptSet.id,
       promptSetVersion: promptSet.version,
       providers: providerReports,
-      pass: providerReports.every((item) => item.pass),
+      sourceGate,
+      pass: providerReports.every((item) => item.pass) && sourceGate.pass,
     };
     await fsp.writeFile(
       path.join(runDir, "acceptance-report.json"),
