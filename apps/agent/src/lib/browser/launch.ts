@@ -1,7 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createServer } from "node:net";
+import path from "node:path";
 import { ExternalServiceError, toErrorMessage } from "@oneglanse/errors";
 import {
 	ensureAuthDirectories,
+	getAgentAuthRootDir,
 	getRuntimeProfileSeedPlan,
 } from "@oneglanse/services";
 import {
@@ -32,6 +36,8 @@ const DEFAULT_PROXY_PORT: Record<ProxyScheme, number> = {
 	https: 443,
 };
 const THORDATA_PROXY_API_TIMEOUT_MS = 10_000;
+const LOCAL_CDP_STARTUP_TIMEOUT_MS = 15_000;
+const LOCAL_CDP_POLL_MS = 250;
 const leasedThorDataProxyUrls = new Set<string>();
 
 let proxyAcquisitionLock = Promise.resolve();
@@ -250,6 +256,42 @@ function shouldUseLocalSystemBrowser(appMode: ReturnType<typeof resolveAppMode>)
 	);
 }
 
+async function reserveLocalPort(): Promise<number> {
+	return await new Promise<number>((resolve, reject) => {
+		const server = createServer();
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			const address = server.address();
+			if (!address || typeof address === "string") {
+				server.close(() => reject(new Error("Could not reserve a local CDP port.")));
+				return;
+			}
+			const port = address.port;
+			server.close((error) => (error ? reject(error) : resolve(port)));
+		});
+	});
+}
+
+async function waitForCdpEndpoint(endpoint: string): Promise<void> {
+	const deadline = Date.now() + LOCAL_CDP_STARTUP_TIMEOUT_MS;
+	let lastError: unknown = null;
+	while (Date.now() < deadline) {
+		try {
+			const response = await fetch(`${endpoint}/json/version`, {
+				signal: AbortSignal.timeout(1_000),
+			});
+			if (response.ok) return;
+			lastError = new Error(`CDP endpoint returned HTTP ${response.status}.`);
+		} catch (error) {
+			lastError = error;
+		}
+		await new Promise((resolve) => setTimeout(resolve, LOCAL_CDP_POLL_MS));
+	}
+	throw new Error(
+		`Timed out waiting for normal browser CDP endpoint ${endpoint}: ${toErrorMessage(lastError)}`,
+	);
+}
+
 export async function launchContext(provider: Provider): Promise<{
 	browser: Browser;
 	context: BrowserContext;
@@ -264,10 +306,14 @@ export async function launchContext(provider: Provider): Promise<{
 	let rawBrowser: import("playwright-core").Browser | null = null;
 	let rawContext: import("playwright-core").BrowserContext | null = null;
 	let context: PlaywrightBrowserContextCompat | null = null;
+	let localBrowserProcess: ReturnType<typeof spawn> | null = null;
 
 	const cleanup = async () => {
 		await context?.close().catch(() => null);
 		await rawBrowser?.close().catch(() => null);
+		if (localBrowserProcess && localBrowserProcess.exitCode === null) {
+			localBrowserProcess.kill();
+		}
 		releaseProxyLease();
 		await displayHandle?.cleanup().catch(() => null);
 	};
@@ -317,18 +363,56 @@ export async function launchContext(provider: Provider): Promise<{
 
 		if (useSystemBrowser) {
 			const resolvedBrowser = resolveSystemBrowser();
-			const browserType =
-				resolvedBrowser.engine === "firefox" ? firefox : chromium;
-			logger.log(
-				`launching local system browser: ${resolvedBrowser.label} (${resolvedBrowser.executablePath})`,
+			if (resolvedBrowser.engine !== "chromium") {
+				throw new Error(
+					"Dockerless local visibility runs currently require Microsoft Edge or Google Chrome.",
+				);
+			}
+			const nativeProfileDir = path.join(
+				getAgentAuthRootDir(),
+				"native-profiles",
+				runtimeSeedPlan.authProvider,
 			);
-			rawBrowser = await browserType.launch({
-				executablePath: resolvedBrowser.executablePath,
-				headless: runtimeHeadlessMode === "headless",
-				...(upstreamProxy
-					? { proxy: toCamoufoxProxyConfig(upstreamProxy) }
-					: {}),
-			});
+			if (!existsSync(nativeProfileDir)) {
+				throw new Error(
+					`Dedicated consumer profile is missing for ${runtimeSeedPlan.authProvider}. Run visibility:auth again before the visibility test.`,
+				);
+			}
+			if (upstreamProxy) {
+				throw new Error(
+					"Local normal-browser CDP mode does not support the cloud proxy path.",
+				);
+			}
+
+			const debugPort = await reserveLocalPort();
+			const cdpEndpoint = `http://127.0.0.1:${debugPort}`;
+			logger.log(
+				`launching normal local ${resolvedBrowser.label} outside Playwright and attaching over CDP (${resolvedBrowser.executablePath})`,
+			);
+			logger.log(`using dedicated authenticated consumer profile: ${nativeProfileDir}`);
+			localBrowserProcess = spawn(
+				resolvedBrowser.executablePath,
+				[
+					`--user-data-dir=${nativeProfileDir}`,
+					`--remote-debugging-port=${debugPort}`,
+					"--remote-debugging-address=127.0.0.1",
+					"--disable-background-mode",
+					"--no-first-run",
+					"--no-default-browser-check",
+					"--new-window",
+					"about:blank",
+				],
+				{
+					stdio: "ignore",
+					windowsHide: false,
+				},
+			);
+			await waitForCdpEndpoint(cdpEndpoint);
+			rawBrowser = await chromium.connectOverCDP(cdpEndpoint);
+			rawContext = rawBrowser.contexts()[0] ?? null;
+			if (!rawContext) {
+				throw new Error("Normal local browser exposed no default CDP context.");
+			}
 		} else {
 			const camoufoxOptions = await resolveCamoufoxLaunchOptions({
 				display,
@@ -340,14 +424,13 @@ export async function launchContext(provider: Provider): Promise<{
 				...(camoufoxOptions as FirefoxLaunchOptions),
 			};
 			rawBrowser = await firefox.launch(launchOptions);
+			rawContext = await rawBrowser.newContext({
+				...(runtimeHeadlessMode === "headless" ? {} : { viewport: null }),
+				...(runtimeSeedPlan.authStatePath
+					? { storageState: runtimeSeedPlan.authStatePath }
+					: {}),
+			});
 		}
-
-		rawContext = await rawBrowser.newContext({
-			...(runtimeHeadlessMode === "headless" ? {} : { viewport: null }),
-			...(runtimeSeedPlan.authStatePath
-				? { storageState: runtimeSeedPlan.authStatePath }
-				: {}),
-		});
 
 		context = new PlaywrightBrowserContextCompat(rawContext);
 		const browser =
