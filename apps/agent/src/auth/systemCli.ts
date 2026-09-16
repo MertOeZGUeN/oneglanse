@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
+import { cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
@@ -50,6 +51,16 @@ function matchesDomainSuffix(domain: string, suffixes: readonly string[]): boole
 	);
 }
 
+function isChromiumProfileLockFile(sourcePath: string): boolean {
+	const name = path.basename(sourcePath);
+	return (
+		name.startsWith("Singleton") ||
+		name === "LOCK" ||
+		name === "LOCKFILE" ||
+		name === "lockfile"
+	);
+}
+
 async function waitForUserConfirmation(providerName: string): Promise<void> {
 	const prompt = createInterface({ input: process.stdin, output: process.stdout });
 	try {
@@ -61,6 +72,25 @@ async function waitForUserConfirmation(providerName: string): Promise<void> {
 	}
 }
 
+async function snapshotProfileForCapture(
+	profileDir: string,
+	attempt: number,
+): Promise<string> {
+	const captureRoot = path.join(getAgentAuthRootDir(), "capture-profiles");
+	const captureDir = path.join(
+		captureRoot,
+		`${path.basename(profileDir)}-${process.pid}-${Date.now()}-${attempt}`,
+	);
+	mkdirSync(captureRoot, { recursive: true });
+	await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+	await cp(profileDir, captureDir, {
+		recursive: true,
+		force: true,
+		filter: (source) => !isChromiumProfileLockFile(source),
+	});
+	return captureDir;
+}
+
 async function captureProfileStorageState(
 	profileDir: string,
 	executablePath: string,
@@ -68,8 +98,10 @@ async function captureProfileStorageState(
 	let lastError: unknown = null;
 
 	for (let attempt = 1; attempt <= PROFILE_CAPTURE_RETRIES; attempt += 1) {
+		let captureDir: string | null = null;
 		try {
-			const context = await chromium.launchPersistentContext(profileDir, {
+			captureDir = await snapshotProfileForCapture(profileDir, attempt);
+			const context = await chromium.launchPersistentContext(captureDir, {
 				executablePath,
 				headless: true,
 				args: [
@@ -88,12 +120,16 @@ async function captureProfileStorageState(
 			if (attempt < PROFILE_CAPTURE_RETRIES) {
 				await sleep(PROFILE_CAPTURE_RETRY_MS);
 			}
+		} finally {
+			if (captureDir) {
+				await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+			}
 		}
 	}
 
 	const detail = lastError instanceof Error ? lastError.message : String(lastError);
 	throw new Error(
-		`Could not reopen the dedicated auth profile to capture its session. Make sure the auth browser window is fully closed, then retry. Last error: ${detail}`,
+		`Could not snapshot and reopen the dedicated auth profile to capture its session. Make sure the auth browser window is fully closed, then retry. Last error: ${detail}`,
 	);
 }
 
@@ -148,7 +184,7 @@ async function runAuthLogin(provider: AuthProvider): Promise<void> {
 
 	const providerName = getProviderDisplayName(runtimeProvider);
 	await waitForUserConfirmation(providerName);
-	await sleep(750);
+	await sleep(1_500);
 
 	const latestState = await captureProfileStorageState(
 		profileDir,
