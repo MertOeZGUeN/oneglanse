@@ -2,6 +2,9 @@ import { ExternalServiceError, toErrorMessage } from "@oneglanse/errors";
 import { RETRYABLE_ERRORS, logger } from "@oneglanse/utils";
 import type { Page } from "playwright";
 
+const ABORTED_NAVIGATION_SETTLE_MS = 5_000;
+const ABORTED_NAVIGATION_POLL_MS = 250;
+
 function jitter(baseMs: number, factor = 0.3): number {
 	const delta = Math.round(baseMs * factor);
 	const min = Math.max(0, baseMs - delta);
@@ -24,12 +27,19 @@ async function recoverSuccessfulAbortedNavigation(
 ): Promise<boolean> {
 	if (!message.includes("net::ERR_ABORTED")) return false;
 
-	// Chromium can report ERR_ABORTED when the provider immediately replaces
-	// the requested URL with its own same-origin route (for example / -> /app).
-	// Treat that as successful only when the browser actually reached the
-	// intended provider origin. This does not suppress unrelated aborts.
-	await page.waitForTimeout(300);
+	// A normal Chromium profile attached over CDP can briefly report
+	// ERR_ABORTED while startup/session restoration replaces about:blank with
+	// the provider route. The URL transition is asynchronous, so an immediate
+	// page.url() check is too early. Poll only for the intended provider origin;
+	// never accept an abort that lands on another origin.
+	const deadline = Date.now() + ABORTED_NAVIGATION_SETTLE_MS;
 	let currentUrl = page.url();
+
+	while (Date.now() < deadline && !isSameOrigin(currentUrl, targetUrl)) {
+		await page.waitForTimeout(ABORTED_NAVIGATION_POLL_MS);
+		currentUrl = page.url();
+	}
+
 	if (!isSameOrigin(currentUrl, targetUrl)) return false;
 
 	await page
@@ -82,7 +92,12 @@ export async function navigateWithRetry(
 				return;
 			}
 
-			const isRetryable = RETRYABLE_ERRORS.some((e) => message.includes(e));
+			// ERR_ABORTED is transient in local normal-browser/CDP startup even when
+			// the first origin poll does not settle in time. Retry it like the other
+			// known navigation transport errors, but still fail after maxRetries.
+			const isRetryable =
+				message.includes("net::ERR_ABORTED") ||
+				RETRYABLE_ERRORS.some((e) => message.includes(e));
 
 			if (!isRetryable || attempt === maxRetries) {
 				throw new ExternalServiceError(
